@@ -5,7 +5,7 @@ use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
 use rand::Rng;
-use crate::constants::{NUMBER_OF_BYZANTINE_NODES, QUORUM, ROUND_TIMER};
+use crate::constants::{NUMBER_OF_BYZANTINE_NODES, QUORUM, ROUND_TIMER, VOTE_DELAY};
 use crate::election::Election;
 use crate::message::Message;
 use crate::NUMBER_OF_NODES;
@@ -278,7 +278,7 @@ impl Node {
         if !self.byzantine {
             for i in 0..NUMBER_OF_NODES {
                 let msg = Message::new(self.id, i, vote.clone());
-                let rand = rand::thread_rng().gen_range(0..2000);
+                let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
                 sleep(Duration::from_millis(rand));
                 self.sender.send(msg).unwrap();
                 println!("Node {}: sent {:?} to {}", self.id, &vote, i);
