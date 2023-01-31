@@ -6,8 +6,11 @@ change a final vote of value v iif there is a more recent set of at least 2f + 1
 For example, if a node makes a final vote of value v in round r, it means that it received at least 2f + 1 initial votes 
 of value v in a previous round r', r' < r. However, if it later receives at least 2f + 1 initial votes of value v' in a 
 round r'', r'' > r', it changes the value of its final vote to v'.
+
 We prove that this change achieves Termination and does not break the Agreement property of consensus in the formal
 proofs. To run the consensus algorithm implementation with logs run ```cargo test -- --nocapture```.
+
+The implementation simulates byzantine behaviour by sending conflicting random votes to different nodes (more complex malicious strategies are not taken into account), and simulates asynchrony by adding a random sleep before sending a vote.
 
 ### Values of Vote
 - Zero
