@@ -10,7 +10,7 @@ We prove that this change achieves Termination and does not break the Agreement 
 proofs. To run the consensus algorithm implementation with logs run ```cargo test -- --nocapture```.
 
 ### Values of Vote
-- Zero,
+- Zero
 - One
 
 ### Types of Vote 
