@@ -2,13 +2,13 @@ use std::collections::BTreeSet;
 use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::{Arc, Condvar, Mutex};
-use std::sync::mpsc::Sender;
+use tokio::sync::mpsc::Sender;
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
 use bytes::Bytes;
 use futures::task::SpawnExt;
-use log::{error, warn};
+use log::{debug, error, warn};
 use rand::Rng;
 use tokio::sync::mpsc::{channel, Receiver};
 use crate::constants::{NUMBER_OF_BYZANTINE_NODES, QUORUM, ROUND_TIMER, VOTE_DELAY};
@@ -22,6 +22,7 @@ use crate::vote::Value::{One, Zero};
 use crate::vote::{Vote, VoteState};
 use crate::vote::VoteState::{Invalid, Pending, Valid};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
+use async_recursion::async_recursion;
 
 //#[cfg(test)]
 //#[path = "tests/core_tests.rs"]
@@ -33,7 +34,6 @@ use store::Store;
 use crate::config::Committee;
 use crate::consensus::{CHANNEL_CAPACITY, ConsensusMessage, Transaction};
 use crate::error::ConsensusError;
-use crate::mempool::MempoolDriver;
 
 pub struct Core {
     id: PublicKey,
@@ -46,6 +46,7 @@ pub struct Core {
     byzantine: bool,
     /// Channel to receive transactions from the network.
     rx_transaction: Receiver<Transaction>,
+    tx_commit: Sender<Block>,
 }
 
 impl Core {
@@ -58,6 +59,7 @@ impl Core {
         rx_message: Receiver<ConsensusMessage>,
         byzantine: bool,
         rx_transaction: Receiver<Transaction>,
+        tx_commit: Sender<Block>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -70,6 +72,7 @@ impl Core {
                 election: Election::new(),
                 byzantine,
                 rx_transaction,
+                tx_commit,
             }
             .run()
             .await
@@ -77,7 +80,7 @@ impl Core {
     }
 
     pub(crate) fn start_new_round(&mut self, round: Round) {
-        println!("Node {}: started round {}!", self.id, round);
+        debug!("Node {}: started round {}!", self.id, round);
         let round_state = RoundState::new();
         let timer = Arc::clone(&round_state.timer);
         self.election.state.insert(round, round_state);
@@ -87,8 +90,8 @@ impl Core {
     fn start_timer(&self, timer: Arc<(Mutex<Timer>, Condvar)>, round: Round) {
         let id = self.id;
         thread::spawn(move || {
-            sleep(Duration::from_millis(ROUND_TIMER as u64));
-            println!("Node {}: round {} expired!", id, round);
+            //sleep(Duration::from_millis(ROUND_TIMER as u64));
+            debug!("Node {}: round {} expired!", id, round);
             let &(ref mutex, ref cvar) = &*timer;
             let mut value = mutex.lock().unwrap();
             *value = Timer::Expired;
@@ -100,9 +103,9 @@ impl Core {
         self.handle_vote(msg.sender, msg.vote.clone());
     }
 
-    //#[async_recursion]
+    #[async_recursion]
     async fn handle_vote(&mut self, from: PublicKey, vote: Vote) {
-        println!("Node {}: received {:?} from node {}", self.id, vote, from);
+        debug!("Node {}: received {:?} from node {}", self.id, vote, from);
         let round = vote.round;
         if self.validate_vote(&vote) == Valid {
             //self.send_vote(vote.clone());
@@ -115,19 +118,19 @@ impl Core {
                 voted_next_round = round_state.voted;
             }
             if votes.len() >= QUORUM && !voted_next_round {
-                let &(ref mutex, ref cvar) = &*round_state.timer;
+                /*let &(ref mutex, ref cvar) = &*round_state.timer;
                 let value = mutex.lock().unwrap();
                 let mut value = value;
                 while *value == Timer::Active {
-                    println!("Node {}: waiting for the round {} to expire...", self.id, round);
+                    debug!("Node {}: waiting for the round {} to expire...", self.id, round);
                     value = cvar.wait(value).unwrap();
-                }
+                }*/
                 if self.election.decided_vote.is_some() {
                     let mut vote = self.election.decided_vote.as_ref().unwrap().clone();
                     vote.round = round + 1;
-                    self.send_vote(vote);
+                    self.send_vote(vote).await;
                 } else {
-                    self.vote_next_round(round + 1, votes);
+                    self.vote_next_round(round + 1, votes).await;
                 }
             }
         }
@@ -137,19 +140,20 @@ impl Core {
         let round = vote.round;
         match self.election.state.get_mut(&round) {
             Some(round_state) => {
-                println!("Node {}: inserted {:?}", self.id, &vote);
+                debug!("Node {}: inserted {:?}", self.id, &vote);
                 round_state.votes.insert(vote.clone());
             }
             None => {
                 self.start_new_round(round);
-                println!("Node {}: inserted {:?}", self.id, &vote);
+                debug!("Node {}: inserted {:?}", self.id, &vote);
                 self.election.state.get_mut(&round).unwrap().votes.insert(vote.clone());
             }
         }
-        println!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &self.election.state.get(&vote.round));
+        debug!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &self.election.state.get(&vote.round));
     }
 
-    fn vote_next_round(&mut self, round: Round, votes: &BTreeSet<Vote>) {
+    #[async_recursion]
+    async fn vote_next_round(&mut self, round: Round, votes: &BTreeSet<Vote>) {
         let mut vote = Vote::random(self.id, round);
         if !self.byzantine {
             vote = Some(self.decide_vote(&votes, round));
@@ -162,7 +166,7 @@ impl Core {
         if vote.is_some() {
             let vote = vote.unwrap();
             round_state.votes.insert(vote.clone());
-            self.send_vote(vote);
+            self.send_vote(vote).await;
         }
     }
 
@@ -231,14 +235,14 @@ impl Core {
             let rs = self.election.state.get(proof_round);
             match rs {
                 Some(rs) => {
-                    println!("Node {}: previous round votes -> {:?}", self.id, rs.votes);
+                    debug!("Node {}: previous round votes -> {:?}", self.id, rs.votes);
                 }
                 None => {
-                    println!("Node {}: round {} have not started yet!", self.id, proof_round);
+                    debug!("Node {}: round {} have not started yet!", self.id, proof_round);
                 }
             }
         }
-        println!("Node {}: {:?} is {:?}", self.id, vote, _state);
+        debug!("Node {}: {:?} is {:?}", self.id, vote, _state);
         _state
     }
 
@@ -314,7 +318,7 @@ impl Core {
         }
     }
 
-    //#[async_recursion]
+    #[async_recursion]
     pub(crate) async fn send_vote(&mut self, vote: Vote) {
         let round = vote.round;
         let broadcast_addresses = self
@@ -330,11 +334,11 @@ impl Core {
             for i in 0..NUMBER_OF_NODES {
                 let msg = Message::new(self.id, public_keys[i], vote.clone());
                 let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
-                sleep(Duration::from_millis(rand));
+                //sleep(Duration::from_millis(rand));
                 let message = bincode::serialize(&ConsensusMessage::Message(msg))
                     .expect("Failed to serialize vote");
                 self.network.send(addresses[i], Bytes::from(message)).await;
-                println!("Node {}: sent {:?} to {}", self.id, &vote, i);
+                debug!("Node {}: sent {:?} to {}", self.id, &vote, i);
             }
         }
         else {
@@ -342,7 +346,7 @@ impl Core {
                 for i in 0..NUMBER_OF_NODES {
                     let vote = Vote::random(self.id, round);
                     if vote.is_some() {
-                        println!("Node {}: sent {:?} to {}", self.id, &vote, i);
+                        debug!("Node {}: sent {:?} to {}", self.id, &vote, i);
                         let msg = Message::new(self.id, public_keys[i],vote.unwrap().clone());
                         let message = bincode::serialize(&ConsensusMessage::Message(msg))
                             .expect("Failed to serialize vote");
@@ -367,7 +371,9 @@ impl Core {
             let result = tokio::select! {
                 Some(message) = self.rx_message.recv() => match message {
                     //ConsensusMessage::Propose(block) => self.handle_proposal(&block).await,
-                    ConsensusMessage::Message(msg) => self.handle_vote(msg.sender, msg.vote).await,
+                    ConsensusMessage::Message(msg) => {
+                        self.handle_vote(msg.sender, msg.vote).await;
+                    }
                     //ConsensusMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
                     //ConsensusMessage::TC(tc) => self.handle_tc(tc).await,
                     _ => panic!("Unexpected protocol message")

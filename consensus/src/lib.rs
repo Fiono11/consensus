@@ -3,9 +3,7 @@ pub use crate::messages::Block;
 pub use crate::consensus::Consensus;
 pub use crate::config::{Committee, Parameters};
 
-//mod node;
 mod constants;
-//mod network;
 mod election;
 mod vote;
 mod round;
@@ -15,9 +13,7 @@ mod consensus;
 mod messages;
 mod error;
 mod config;
-//mod synchronizer;
-mod mempool;
-//mod helper;
+//mod mempool;
 mod core;
 
 #[test]

@@ -11,18 +11,16 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey, SignatureService};
 use futures::SinkExt as _;
-use log::info;
+use log::{debug, info};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use mempool::ConsensusMempoolMessage;
 use crate::error::ConsensusError;
 use crate::messages::{Block, TC, Timeout};
 use crate::config::{Committee, Parameters};
 use crate::core::Core;
-use crate::mempool::MempoolDriver;
 use crate::message::Message;
 use crate::vote::Vote;
 
@@ -56,6 +54,7 @@ impl Consensus {
         parameters: Parameters,
         signature_service: SignatureService,
         store: Store,
+        tx_commit: Sender<Block>,
     ) {
         // NOTE: This log entry is used to compute performance.
         parameters.log();
@@ -73,15 +72,7 @@ impl Consensus {
         let mut tx_address = committee
             .transactions_address(&name)
             .expect("Our public key is not in the committee");
-        address.set_ip("0.0.0.0".parse().unwrap());
-
-        NetworkReceiver::spawn(
-            address,
-            /* handler */
-            ConsensusReceiverHandler {
-                tx_consensus,
-            },
-        );
+        tx_address.set_ip("0.0.0.0".parse().unwrap());
 
         NetworkReceiver::spawn(
             tx_address,
@@ -91,10 +82,20 @@ impl Consensus {
             },
         );
 
+        NetworkReceiver::spawn(
+            address,
+            /* handler */
+            ConsensusReceiverHandler {
+                tx_consensus,
+            },
+        );
+
         info!(
             "Node {} listening to consensus messages on {}",
             name, address
         );
+
+        info!("Mempool listening to client transactions on {}", tx_address);
 
         // Spawn the consensus core.
         Core::spawn(
@@ -102,9 +103,10 @@ impl Consensus {
             committee.clone(),
             signature_service.clone(),
             store.clone(),
-            /* rx_message */ rx_consensus,
+            rx_consensus,
             false,
             rx_transaction,
+            tx_commit
         );
     }
 }

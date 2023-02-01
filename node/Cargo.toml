@@ -23,10 +23,9 @@ anyhow = "1.0.38"
 crypto = { path = "../crypto" }
 store = { path = "../store" }
 consensus = { path = "../consensus" }
-mempool = { path = "../mempool" }
 
 [features]
-#benchmark = ["consensus/benchmark", "mempool/benchmark"]
+benchmark = ["consensus/benchmark"]
 
 [[bin]]         
 name = "client"   

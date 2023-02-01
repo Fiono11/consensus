@@ -1,6 +1,5 @@
 use consensus::{Committee as ConsensusCommittee, Parameters as ConsensusParameters};
 use crypto::{generate_keypair, generate_production_keypair, PublicKey, SecretKey};
-use mempool::{Committee as MempoolCommittee, Parameters as MempoolParameters};
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;
 use serde::de::DeserializeOwned;
@@ -50,7 +49,6 @@ pub trait Export: Serialize + DeserializeOwned {
 #[derive(Serialize, Deserialize, Default)]
 pub struct Parameters {
     pub consensus: ConsensusParameters,
-    //pub mempool: MempoolParameters,
 }
 
 impl Export for Parameters {}
@@ -81,7 +79,6 @@ impl Default for Secret {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Committee {
     pub consensus: ConsensusCommittee,
-    //pub mempool: MempoolCommittee,
 }
 
 impl Export for Committee {}

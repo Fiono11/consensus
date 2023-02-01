@@ -85,7 +85,7 @@ impl Committee {
     pub fn broadcast_addresses(&self, myself: &PublicKey) -> Vec<(PublicKey, SocketAddr)> {
         self.authorities
             .iter()
-            .filter(|(name, _)| name != &myself)
+            //.filter(|(name, _)| name != &myself)
             .map(|(name, x)| (*name, x.address))
             .collect()
     }

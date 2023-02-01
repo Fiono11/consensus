@@ -45,6 +45,8 @@ async fn main() -> Result<()> {
         .format_timestamp_millis()
         .init();
 
+    info!("nodes1: {:?}", &cli.nodes);
+
     info!("Node address: {}", cli.target);
     info!("Transactions size: {} B", cli.size);
     info!("Transactions rate: {} tx/s", cli.rate);
@@ -58,6 +60,8 @@ async fn main() -> Result<()> {
 
     // Wait for all nodes to be online and synchronized.
     client.wait().await;
+
+    info!("3");
 
     // Start the benchmark.
     client.send().await.context("Failed to submit transactions")
@@ -105,7 +109,7 @@ impl Client {
             interval.as_mut().tick().await;
             let now = Instant::now();
 
-            for x in 0..2 {
+            //for x in 0..2 {
                 //if x == counter % burst {
                     // NOTE: This log entry is used to compute performance.
                     info!("Sending sample transaction {}", counter);
@@ -125,7 +129,7 @@ impl Client {
                     warn!("Failed to send transaction: {}", e);
                     //break 'main;
                 }
-            }
+            //}
             if now.elapsed().as_millis() > BURST_DURATION as u128 {
                 // NOTE: This log entry is used to compute performance.
                 warn!("Transaction rate too high for this client");
