@@ -3,21 +3,22 @@ use crate::node::Id;
 use crate::round::Round;
 use crate::vote::Category::{Decided, Final, Initial};
 use crate::vote::Value::{One, Zero};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     Zero,
     One,
 }
 
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Category {
     Initial,
     Final,
     Decided,
 }
 
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Vote {
     pub(crate) signer: Id,
     pub(crate) round: Round,

@@ -1,11 +1,2 @@
-[package]
-name = "consensus_new"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-rand = "0.8.5"
-byteorder = "1.4.2"
-hex = "0.4.3"
+[workspace]
+members = ["store", "crypto", "mempool", "network", "node", "consensus"]
