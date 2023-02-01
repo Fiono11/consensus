@@ -33,7 +33,10 @@ impl Parameters {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Authority {
     pub stake: Stake,
+    /// Address to receive messages from other nodes.
     pub address: SocketAddr,
+    /// Address to receive client transactions.
+    pub transactions_address: SocketAddr,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -43,12 +46,16 @@ pub struct Committee {
 }
 
 impl Committee {
-    pub fn new(info: Vec<(PublicKey, Stake, SocketAddr)>, epoch: EpochNumber) -> Self {
+    pub fn new(info: Vec<(PublicKey, Stake, SocketAddr, SocketAddr)>, epoch: EpochNumber) -> Self {
         Self {
             authorities: info
                 .into_iter()
-                .map(|(name, stake, address)| {
-                    let authority = Authority { stake, address };
+                .map(|(name, stake, transactions_address, address)| {
+                    let authority = Authority {
+                        stake,
+                        transactions_address,
+                        address,
+                    };
                     (name, authority)
                 })
                 .collect(),
@@ -81,5 +88,10 @@ impl Committee {
             .filter(|(name, _)| name != &myself)
             .map(|(name, x)| (*name, x.address))
             .collect()
+    }
+
+    /// Returns the address to receive client transactions.
+    pub fn transactions_address(&self, name: &PublicKey) -> Option<SocketAddr> {
+        self.authorities.get(name).map(|x| x.transactions_address)
     }
 }

@@ -1,7 +1,6 @@
 use crate::config::Export as _;
 use crate::config::{Committee, ConfigError, Parameters, Secret};
-//use consensus::{Block, Consensus};
-use consensus::Block;
+use consensus::{Block, Consensus};
 use crypto::SignatureService;
 use log::info;
 use mempool::Mempool;
@@ -23,9 +22,6 @@ impl Node {
         parameters: Option<String>,
     ) -> Result<Self, ConfigError> {
         let (tx_commit, rx_commit) = channel(CHANNEL_CAPACITY);
-        let (tx_consensus_to_mempool, rx_consensus_to_mempool) = channel(CHANNEL_CAPACITY);
-        let (tx_mempool_to_consensus, rx_mempool_to_consensus) = channel(CHANNEL_CAPACITY);
-        let (tx_new_mempool_to_consensus, rx_new_mempool_to_consensus) = channel(CHANNEL_CAPACITY);
 
         // Read the committee and secret key from file.
         let committee = Committee::read(committee_file)?;
@@ -45,29 +41,14 @@ impl Node {
         // Run the signature service.
         let signature_service = SignatureService::new(secret_key);
 
-        // Make a new mempool.
-        Mempool::spawn(
-            name,
-            committee.mempool,
-            parameters.mempool,
-            store.clone(),
-            rx_consensus_to_mempool,
-            tx_mempool_to_consensus,
-            tx_new_mempool_to_consensus,
-        );
-
         // Run the consensus core.
-        /*Consensus::spawn(
+        Consensus::spawn(
             name,
             committee.consensus,
             parameters.consensus,
             signature_service,
             store,
-            rx_mempool_to_consensus,
-            rx_new_mempool_to_consensus,
-            tx_consensus_to_mempool,
-            tx_commit,
-        );*/
+        );
 
         info!("Node {} successfully booted", name);
         Ok(Self { commit: rx_commit })

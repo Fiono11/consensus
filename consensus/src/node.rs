@@ -5,6 +5,7 @@ use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
 use rand::Rng;
+use crypto::PublicKey;
 use crate::constants::{NUMBER_OF_BYZANTINE_NODES, QUORUM, ROUND_TIMER, VOTE_DELAY};
 use crate::election::Election;
 use crate::message::Message;
@@ -20,14 +21,14 @@ pub type Id = usize;
 
 #[derive(Debug)]
 pub(crate) struct Node {
-    id: Id,
+    id: PublicKey,
     sender: Sender<Message>,
     election: Election,
     pub(crate) byzantine: bool,
 }
 
 impl Node {
-    pub(crate) fn new(id: Id, sender: Sender<Message>, byzantine: bool) -> Self {
+    pub(crate) fn new(id: PublicKey, sender: Sender<Message>, byzantine: bool) -> Self {
         Node {
             id,
             sender,
@@ -60,7 +61,7 @@ impl Node {
         self.handle_vote(msg.sender, msg.vote.clone());
     }
 
-    fn handle_vote(&mut self, from: Id, vote: Vote) {
+    fn handle_vote(&mut self, from: PublicKey, vote: Vote) {
         println!("Node {}: received {:?} from node {}", self.id, vote, from);
         let round = vote.round;
         if self.validate_vote(&vote) == Valid {

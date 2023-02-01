@@ -1,10 +1,11 @@
 use crate::constants::NUMBER_OF_NODES;
-use crate::network::Network;
 pub use crate::messages::Block;
+pub use crate::consensus::Consensus;
+pub use crate::config::{Committee, Parameters};
 
-mod node;
+//mod node;
 mod constants;
-mod network;
+//mod network;
 mod election;
 mod vote;
 mod round;

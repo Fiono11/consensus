@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::{Arc, Condvar, Mutex};
 use std::sync::mpsc::Sender;
@@ -6,9 +7,10 @@ use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
 use bytes::Bytes;
+use futures::task::SpawnExt;
 use log::{error, warn};
 use rand::Rng;
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::{channel, Receiver};
 use crate::constants::{NUMBER_OF_BYZANTINE_NODES, QUORUM, ROUND_TIMER, VOTE_DELAY};
 use crate::election::Election;
 use crate::message::Message;
@@ -19,6 +21,7 @@ use crate::vote::Category::{Decided, Final, Initial};
 use crate::vote::Value::{One, Zero};
 use crate::vote::{Vote, VoteState};
 use crate::vote::VoteState::{Invalid, Pending, Valid};
+use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 
 //#[cfg(test)]
 //#[path = "tests/core_tests.rs"]
@@ -28,79 +31,45 @@ use crypto::{PublicKey, SignatureService};
 use network::SimpleSender;
 use store::Store;
 use crate::config::Committee;
-use crate::consensus::ConsensusMessage;
+use crate::consensus::{CHANNEL_CAPACITY, ConsensusMessage, Transaction};
 use crate::error::ConsensusError;
 use crate::mempool::MempoolDriver;
-use crate::node::Id;
 
 pub struct Core {
-    name: PublicKey,
+    id: PublicKey,
     committee: Committee,
     store: Store,
     signature_service: SignatureService,
-    //leader_elector: LeaderElector,
-    mempool_driver: MempoolDriver,
-    //synchronizer: Synchronizer,
     rx_message: Receiver<ConsensusMessage>,
-    //rx_loopback: Receiver<Block>,
-    //tx_proposer: Sender<ProposerMessage>,
-    //tx_commit: Sender<Block>,
-    round: Round,
-    last_voted_round: Round,
-    last_committed_round: Round,
-    //high_qc: QC,
-    //timer: Timer,
-    //aggregator: Aggregator,
     network: SimpleSender,
-    id: Id,
-    sender: Sender<Message>,
     election: Election,
-    pub(crate) byzantine: bool,
+    byzantine: bool,
+    /// Channel to receive transactions from the network.
+    rx_transaction: Receiver<Transaction>,
 }
 
 impl Core {
     #[allow(clippy::too_many_arguments)]
     pub fn spawn(
-        name: PublicKey,
+        id: PublicKey,
         committee: Committee,
         signature_service: SignatureService,
         store: Store,
-        //leader_elector: LeaderElector,
-        mempool_driver: MempoolDriver,
-        //synchronizer: Synchronizer,
-        timeout_delay: u64,
         rx_message: Receiver<ConsensusMessage>,
-        rx_loopback: Receiver<Block>,
-        //tx_proposer: Sender<ProposerMessage>,
-        tx_commit: Sender<Block>,
-        id: Id,
-        sender: Sender<Message>,
-        byzantine: bool
+        byzantine: bool,
+        rx_transaction: Receiver<Transaction>,
     ) {
         tokio::spawn(async move {
             Self {
-                name,
+                id,
                 committee: committee.clone(),
                 signature_service,
                 store,
-                //leader_elector,
-                mempool_driver,
-                //synchronizer,
                 rx_message,
-                //rx_loopback,
-                //tx_proposer,
-                //tx_commit,
-                round: 1,
-                last_voted_round: 0,
-                last_committed_round: 0,
-                //high_qc: QC::genesis(),
-                //timer: Timer::new(timeout_delay),
-                //aggregator: Aggregator::new(committee),
                 network: SimpleSender::new(),
-                id,
-                sender,
                 election: Election::new(),
                 byzantine,
+                rx_transaction,
             }
             .run()
             .await
@@ -132,7 +101,7 @@ impl Core {
     }
 
     //#[async_recursion]
-    async fn handle_vote(&mut self, from: Id, vote: Vote) {
+    async fn handle_vote(&mut self, from: PublicKey, vote: Vote) {
         println!("Node {}: received {:?} from node {}", self.id, vote, from);
         let round = vote.round;
         if self.validate_vote(&vote) == Valid {
@@ -350,19 +319,21 @@ impl Core {
         let round = vote.round;
         let broadcast_addresses = self
             .committee
-            .broadcast_addresses(&self.name);
+            .broadcast_addresses(&self.id);
         let mut addresses: Vec<SocketAddr> = Vec::new();
+        let mut public_keys: Vec<PublicKey> = Vec::new();
         for (pk, sa) in broadcast_addresses {
             addresses.push(sa);
+            public_keys.push(pk);
         }
         if !self.byzantine {
             for i in 0..NUMBER_OF_NODES {
-                let msg = Message::new(self.id, i, vote.clone());
+                let msg = Message::new(self.id, public_keys[i], vote.clone());
                 let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
                 sleep(Duration::from_millis(rand));
                 let message = bincode::serialize(&ConsensusMessage::Message(msg))
                     .expect("Failed to serialize vote");
-                self.network.broadcast(addresses.clone(), Bytes::from(message)).await;
+                self.network.send(addresses[i], Bytes::from(message)).await;
                 println!("Node {}: sent {:?} to {}", self.id, &vote, i);
             }
         }
@@ -372,11 +343,10 @@ impl Core {
                     let vote = Vote::random(self.id, round);
                     if vote.is_some() {
                         println!("Node {}: sent {:?} to {}", self.id, &vote, i);
-                        let msg = Message::new(self.id, i,vote.unwrap().clone());
-                        // send to different nodes
+                        let msg = Message::new(self.id, public_keys[i],vote.unwrap().clone());
                         let message = bincode::serialize(&ConsensusMessage::Message(msg))
                             .expect("Failed to serialize vote");
-                        self.network.broadcast(addresses.clone(), Bytes::from(message)).await;
+                        self.network.send(addresses[i], Bytes::from(message)).await;
                     }
                 }
             }
@@ -402,6 +372,10 @@ impl Core {
                     //ConsensusMessage::TC(tc) => self.handle_tc(tc).await,
                     _ => panic!("Unexpected protocol message")
                 },
+                Some(transaction) = self.rx_transaction.recv() => {
+                    let vote = Vote::random_initial(self.id);
+                    self.send_vote(vote).await;
+                },
                 //Some(block) = self.rx_loopback.recv() => self.process_block(&block).await,
                 //() = &mut self.timer => self.local_timeout_round().await,
             };
@@ -414,3 +388,4 @@ impl Core {
         }
     }
 }
+
