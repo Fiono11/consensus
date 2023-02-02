@@ -3,7 +3,8 @@ use crate::round::Round;
 use crate::vote::Category::{Decided, Final, Initial};
 use crate::vote::Value::{One, Zero};
 use serde::{Deserialize, Serialize};
-use crypto::PublicKey;
+use crypto::{Digest, PublicKey};
+use crate::Transaction;
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Value {
@@ -22,19 +23,19 @@ pub enum Category {
 pub struct Vote {
     pub(crate) signer: PublicKey,
     pub(crate) round: Round,
-    pub(crate) value: Value,
+    pub(crate) value: Transaction,
     pub(crate) category: Category,
     pub(crate) proof_round: Option<Round>
 }
 
 impl Vote {
-    pub(crate) fn new(id: PublicKey, round: Round, value: Value, category: Category, proof_round: Option<Round>) -> Vote {
+    pub(crate) fn new(id: PublicKey, round: Round, value: Transaction, category: Category, proof_round: Option<Round>) -> Vote {
         Vote {
             signer: id, round, value, category, proof_round,
         }
     }
 
-    pub(crate) fn random_initial(id: PublicKey) -> Vote {
+    /*pub(crate) fn random_initial(id: PublicKey) -> Vote {
         if rand::thread_rng().gen_range(0..2) == 0 {
             Vote::new(id, 0, Zero, Initial, None)
         } else {
@@ -65,7 +66,7 @@ impl Vote {
         else {
             None
         }
-    }
+    }**/
 }
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]

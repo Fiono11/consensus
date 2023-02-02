@@ -158,11 +158,11 @@ class LogParser:
             #},
         #}
 
-        tmp = findall(r'\[(.*Z) .* Created ([^ ]+=)', log)
+        tmp = findall(r'\[(.*Z) .* Received ([^ ]+=)', log)
         tmp = [(d, self._to_posix(t)) for t, d in tmp]
         proposals = self._merge_results([tmp])
 
-        tmp = findall(r'\[(.*Z) .* Decided ([^ ]+) -> ([^ ]+=)', log)
+        tmp = findall(r'\[(.*Z) .* Decided ([^ ]+=)', log)
         decisions = [(d, a) for t, a, d in tmp]
         tmp = [(d, self._to_posix(t)) for t, a, d in tmp]
         commits = self._merge_results([tmp])

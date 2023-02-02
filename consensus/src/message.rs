@@ -24,6 +24,12 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    pub fn new(parent_hash: Digest, tx_hash: Digest) -> Self {
+        Self {
+            parent_hash, tx_hash
+        }
+    }
+
     pub fn random() -> Self {
         Self {
             parent_hash: Digest::random(),
