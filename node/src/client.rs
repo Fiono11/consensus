@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use bytes::BufMut as _;
+use bytes::{BufMut, Bytes};
 use bytes::BytesMut;
 use clap::Parser;
 use env_logger::Env;
@@ -11,6 +11,7 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use consensus::Transaction;
 
 #[derive(Parser)]
 #[clap(
@@ -94,9 +95,11 @@ impl Client {
 
         // Submit all transactions.
         let burst = self.rate / PRECISION;
-        let mut tx = BytesMut::with_capacity(self.size);
+        let message = bincode::serialize(&Transaction::random()).unwrap();
+        let tx = Bytes::from(message);
+        //let mut tx = BytesMut::with_capacity(self.size);
         let mut counter = 0;
-        let mut r = rand::thread_rng().gen();
+        //let mut r = rand::thread_rng().gen();
         let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
         let interval = interval(Duration::from_millis(BURST_DURATION));
         tokio::pin!(interval);
@@ -114,18 +117,18 @@ impl Client {
                     // NOTE: This log entry is used to compute performance.
                     info!("Sending sample transaction {}", counter);
 
-                    tx.put_u8(0u8); // Sample txs start with 0.
-                    tx.put_u64(counter); // This counter identifies the tx.
+                    //tx.put_u8(0u8); // Sample txs start with 0.
+                    //tx.put_u64(counter); // This counter identifies the tx.
                 //} else {
-                    r += 1;
+                    //r += 1;
 
-                    tx.put_u8(1u8); // Standard txs start with 1.
-                    tx.put_u64(r); // Ensures all clients send different txs.
+                    //tx.put_u8(1u8); // Standard txs start with 1.
+                    //tx.put_u64(r); // Ensures all clients send different txs.
                 //};
-                tx.resize(self.size, 0u8);
-                let bytes = tx.split().freeze();
+                //tx.resize(self.size, 0u8);
+                //let bytes = tx.split().freeze();
 
-                if let Err(e) = transport.send(bytes).await {
+                if let Err(e) = transport.send(tx.clone()).await {
                     warn!("Failed to send transaction: {}", e);
                     //break 'main;
                 }

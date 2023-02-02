@@ -167,6 +167,10 @@ class LogParser:
         tmp = [(d, self._to_posix(t)) for t, a, d in tmp]
         commits = self._merge_results([tmp])
 
+        print ("proposals: ", proposals)
+        print ("decisions: ", decisions)
+        print ("commits: ", commits)
+
         return proposals, commits, decisions
 
         #return proposals, commits, sizes, samples, timeouts, configs

@@ -14,7 +14,7 @@ use tokio::sync::mpsc::{channel, Receiver};
 use crate::constants::{NUMBER_OF_BYZANTINE_NODES, QUORUM, ROUND_TIMER, VOTE_DELAY};
 use crate::election::Election;
 use crate::message::Message;
-use crate::{Block, NUMBER_OF_NODES};
+use crate::{Block, NUMBER_OF_NODES, Transaction};
 use crate::round::{Round, RoundState, Timer};
 use crate::tally::tally_votes;
 use crate::vote::Category::{Decided, Final, Initial};
@@ -32,7 +32,7 @@ use crypto::{PublicKey, SignatureService};
 use network::SimpleSender;
 use store::Store;
 use crate::config::Committee;
-use crate::consensus::{CHANNEL_CAPACITY, ConsensusMessage, Transaction};
+use crate::consensus::{CHANNEL_CAPACITY, ConsensusMessage};
 use crate::error::ConsensusError;
 
 pub struct Core {
@@ -409,7 +409,7 @@ impl Core {
                     _ => panic!("Unexpected protocol message")
                 },
                 Some(transaction) = self.rx_transaction.recv() => {
-                    info!("Created {:?}", transaction);
+                    info!("Created {:?}", transaction.tx_hash);
                     let vote = Vote::random_initial(self.id);
                     self.send_vote(vote).await;
                 },

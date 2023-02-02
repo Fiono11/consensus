@@ -22,6 +22,7 @@ use crate::messages::{Block, TC, Timeout};
 use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::message::Message;
+use crate::Transaction;
 use crate::vote::Vote;
 
 //#[cfg(test)]
@@ -119,7 +120,7 @@ struct ConsensusReceiverHandler {
 
 #[async_trait]
 impl MessageHandler for ConsensusReceiverHandler {
-    async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
+    async fn dispatch(&self, _writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized).map_err(ConsensusError::SerializationError)? {
             message => self
@@ -132,8 +133,6 @@ impl MessageHandler for ConsensusReceiverHandler {
     }
 }
 
-pub type Transaction = Vec<u8>;
-
 /// Defines how the network receiver handles incoming transactions.
 #[derive(Clone)]
 struct TxReceiverHandler {
@@ -142,12 +141,15 @@ struct TxReceiverHandler {
 
 #[async_trait]
 impl MessageHandler for TxReceiverHandler {
-    async fn dispatch(&self, _writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>> {
-        // Send the transaction to the batch maker.
-        self.tx_transaction
-            .send(message.to_vec())
-            .await
-            .expect("Failed to send transaction");
+    async fn dispatch(&self, _writer: &mut Writer, tx: Bytes) -> Result<(), Box<dyn Error>> {
+        // Deserialize and parse the transaction.
+        match bincode::deserialize(&tx).map_err(ConsensusError::SerializationError)? {
+            message => self
+                .tx_transaction
+                .send(message)
+                .await
+                .expect("Failed to transaction"),
+        }
 
         // Give the change to schedule other tasks.
         tokio::task::yield_now().await;

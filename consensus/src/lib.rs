@@ -2,6 +2,7 @@ use crate::constants::NUMBER_OF_NODES;
 pub use crate::messages::Block;
 pub use crate::consensus::Consensus;
 pub use crate::config::{Committee, Parameters};
+pub use crate::message::Transaction;
 
 mod constants;
 mod election;
@@ -13,7 +14,6 @@ mod consensus;
 mod messages;
 mod error;
 mod config;
-//mod mempool;
 mod core;
 
 #[test]
