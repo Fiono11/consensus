@@ -23,6 +23,7 @@ use crate::vote::{Value, Vote, VoteState};
 use crate::vote::VoteState::{Invalid, Pending, Valid};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use async_recursion::async_recursion;
+use futures::StreamExt;
 
 //#[cfg(test)]
 //#[path = "tests/core_tests.rs"]
@@ -107,17 +108,16 @@ impl Core {
         let e = self.elections.get(&msg.vote.value.parent_hash).cloned();
         match e {
             Some(election) => {
-                self.handle_vote(msg.sender, msg.vote.clone(), &election).await
+                self.handle_vote(msg.sender, msg.vote.clone()).await
             }
             None => {
-                self.handle_vote(msg.sender, msg.vote.clone(), &Election::new()).await
+                self.handle_vote(msg.sender, msg.vote.clone()).await
             }
         }
     }
 
     //#[async_recursion]
-    async fn handle_vote(&mut self, from: PublicKey, vote: Vote, election: &Election) {
-        //let election = self.elections.get_mut(&tx.parent_hash).unwrap();
+    async fn handle_vote(&mut self, from: PublicKey, vote: Vote) {
         debug!("Node {}: received {:?} from node {}", self.id, vote, from);
         let tx = &vote.value;
         let round = vote.round;
@@ -125,6 +125,7 @@ impl Core {
             self.send_vote(vote.clone());
             self.insert_vote(vote.clone(), tx);
             self.try_validate_pending_votes(&round, tx);
+            let election = self.elections.get_mut(&tx.parent_hash).unwrap();
             let round_state = election.state.get(&round).unwrap().clone();
             let votes = &round_state.votes;
             let mut voted_next_round = false;
@@ -152,27 +153,32 @@ impl Core {
 
     fn insert_vote(&mut self, vote: Vote, tx: &Transaction) {
         let round = vote.round;
-        //let election = self.elections.get_mut(&tx.parent_hash).unwrap();
-        match election.state.get_mut(&round) {
+        let election= self.elections.get_mut(&tx.parent_hash).unwrap();
+        let rs = election.state.get_mut(&round);
+        match rs {
             Some(round_state) => {
                 debug!("Node {}: inserted {:?}", self.id, &vote);
                 round_state.votes.insert(vote.clone());
             }
             None => {
-                self.start_new_round(round, tx);
                 debug!("Node {}: inserted {:?}", self.id, &vote);
                 election.state.get_mut(&round).unwrap().votes.insert(vote.clone());
+                self.start_new_round(round, tx);
             }
         }
-        debug!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &election.state.get(&vote.round));
+        //debug!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &election.state.get(&vote.round));
     }
 
     #[async_recursion]
     async fn vote_next_round(&mut self, round: Round, votes: &BTreeSet<Vote>, tx: &Transaction) {
+        //if election.state.get_mut(&round).is_none() {
+            self.start_new_round(round, tx);
+        //}
         let election = self.elections.get_mut(&tx.parent_hash).unwrap();
-        let concurrent_txs: Vec<Digest> = self.elections.get(&tx.parent_hash).unwrap().concurrent_txs.clone().into_iter().collect();
+        let concurrent_txs: Vec<Digest> = election.concurrent_txs.clone().into_iter().collect();
         let rand = thread_rng().gen_range(0..concurrent_txs.len() + 1);
         let rand2 = thread_rng().gen_range(0..3);
+        let mut round_state = election.state.get_mut(&round).unwrap().clone();
         let mut category = Initial;
         if rand2 == 0 {
             category = Final;
@@ -188,23 +194,20 @@ impl Core {
         if !self.byzantine {
             vote = Some(self.decide_vote(&votes, round, tx));
         }
-        if election.state.get_mut(&round).is_none() {
-            self.start_new_round(round, tx);
-        }
-        let mut round_state = election.state.get_mut(&round).unwrap();
-        round_state.voted = true;
         if vote.is_some() {
             let vote = vote.unwrap();
+            self.send_vote(vote.clone()).await;
             round_state.votes.insert(vote.clone());
-            self.send_vote(vote).await;
+            round_state.voted = true;
+            self.elections.get_mut(&tx.parent_hash).unwrap().state.insert(round, round_state);
         }
     }
 
     fn validate_vote(&mut self, vote: &Vote, tx: &Transaction) -> VoteState {
+        let concurrent_txs = self.elections.get(&tx.parent_hash).unwrap().concurrent_txs.clone();
         let election = self.elections.get_mut(&tx.parent_hash).unwrap();
         let mut _state = Invalid;
         let tx = vote.value.clone();
-        let concurrent_txs = self.elections.get(&tx.parent_hash).unwrap().concurrent_txs.clone();
         match vote.category {
             Decided => {
                 let proof_round = vote.proof_round.unwrap();
@@ -286,8 +289,8 @@ impl Core {
     }
 
     fn decide_vote(&mut self, votes: &BTreeSet<Vote>, round: Round, tx: &Transaction) -> Vote {
-        let election = self.elections.get_mut(&tx.parent_hash).unwrap();
         let concurrent_txs = self.elections.get(&tx.parent_hash).unwrap().concurrent_txs.clone();
+        let election = self.elections.get_mut(&tx.parent_hash).unwrap();
         assert!(votes.len() >= QUORUM);
         let previous_round = round - 1;
         let previous_round_state = election.state.get(&previous_round).unwrap();
@@ -403,10 +406,10 @@ impl Core {
                         let e = self.elections.get(&msg.vote.value.parent_hash).cloned();
                         match e {
                             Some(election) => {
-                                self.handle_vote(msg.sender, msg.vote.clone(), &election).await
+                                self.handle_vote(msg.sender, msg.vote.clone()).await
                             }
                             None => {
-                                self.handle_vote(msg.sender, msg.vote.clone(), &Election::new()).await
+                                self.handle_vote(msg.sender, msg.vote.clone()).await
                             }
                         }
                     }
