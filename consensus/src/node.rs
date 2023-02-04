@@ -45,7 +45,7 @@ impl Node {
 
     pub(crate) fn start_new_round(&mut self, round: Round, tx: &Transaction) {
         let election = self.elections.get_mut(&tx.parent_hash).unwrap();
-        debug!("Node {}: started round {}!", self.id, round);
+        println!("Node {}: started round {}!", self.id, round);
         let round_state = RoundState::new();
         let timer = Arc::clone(&round_state.timer);
         election.state.insert(round, round_state);
@@ -56,7 +56,7 @@ impl Node {
         let id = self.id;
         thread::spawn(move || {
             //sleep(Duration::from_millis(ROUND_TIMER as u64));
-            debug!("Node {}: round {} expired!", id, round);
+            println!("Node {}: round {} expired!", id, round);
             let &(ref mutex, ref cvar) = &*timer;
             let mut value = mutex.lock().unwrap();
             *value = Timer::Expired;
@@ -64,23 +64,25 @@ impl Node {
         });
     }
 
-    pub(crate) async fn handle_message(&mut self, msg: &Message) {
+    pub(crate) fn handle_message(&mut self, msg: &Message) {
         let e = self.elections.get(&msg.vote.value.parent_hash).cloned();
         match e {
             Some(election) => {
-                self.handle_vote(msg.sender, msg.vote.clone()).await
+                self.handle_vote(msg.sender, msg.vote.clone())
             }
             None => {
-                self.handle_vote(msg.sender, msg.vote.clone()).await
+                self.handle_vote(msg.sender, msg.vote.clone())
             }
         }
     }
 
     //#[async_recursion]
-    async fn handle_vote(&mut self, from: PublicKey, vote: Vote) {
-        debug!("Node {}: received {:?} from node {}", self.id, vote, from);
+    fn handle_vote(&mut self, from: PublicKey, vote: Vote) {
+        println!("Node {}: received {:?} from node {}", self.id, vote, from);
         let tx = &vote.value;
         let round = vote.round;
+        let election = Election::new();
+        self.elections.insert(vote.value.parent_hash.clone(), election);
         if self.validate_vote(&vote, tx) == Valid {
             self.send_vote(vote.clone());
             self.insert_vote(vote.clone(), tx);
@@ -97,15 +99,15 @@ impl Node {
                 let value = mutex.lock().unwrap();
                 let mut value = value;
                 while *value == Timer::Active {
-                    debug!("Node {}: waiting for the round {} to expire...", self.id, round);
+                    println!("Node {}: waiting for the round {} to expire...", self.id, round);
                     value = cvar.wait(value).unwrap();
                 }*/
                 if election.decided_vote.is_some() {
                     let mut vote = election.decided_vote.as_ref().unwrap().clone();
                     vote.round = round + 1;
-                    self.send_vote(vote).await;
+                    self.send_vote(vote);
                 } else {
-                    self.vote_next_round(round + 1, votes,&vote.value).await;
+                    self.vote_next_round(round + 1, votes,&vote.value);
                 }
             }
         }
@@ -114,23 +116,24 @@ impl Node {
     fn insert_vote(&mut self, vote: Vote, tx: &Transaction) {
         let round = vote.round;
         let election= self.elections.get_mut(&tx.parent_hash).unwrap();
+        election.concurrent_txs.insert(tx.tx_hash.clone());
         let rs = election.state.get_mut(&round);
         match rs {
             Some(round_state) => {
-                debug!("Node {}: inserted {:?}", self.id, &vote);
+                println!("Node {}: inserted {:?}", self.id, &vote);
                 round_state.votes.insert(vote.clone());
             }
             None => {
-                debug!("Node {}: inserted {:?}", self.id, &vote);
+                println!("Node {}: inserted {:?}", self.id, &vote);
                 election.state.get_mut(&round).unwrap().votes.insert(vote.clone());
                 self.start_new_round(round, tx);
             }
         }
-        //debug!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &election.state.get(&vote.round));
+        //println!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &election.state.get(&vote.round));
     }
 
-    #[async_recursion]
-    async fn vote_next_round(&mut self, round: Round, votes: &BTreeSet<Vote>, tx: &Transaction) {
+    //#[async_recursion]
+    fn vote_next_round(&mut self, round: Round, votes: &BTreeSet<Vote>, tx: &Transaction) {
         //if election.state.get_mut(&round).is_none() {
         self.start_new_round(round, tx);
         //}
@@ -156,7 +159,7 @@ impl Node {
         }
         if vote.is_some() {
             let vote = vote.unwrap();
-            self.send_vote(vote.clone()).await;
+            self.send_vote(vote.clone());
             round_state.votes.insert(vote.clone());
             round_state.voted = true;
             self.elections.get_mut(&tx.parent_hash).unwrap().state.insert(round, round_state);
@@ -224,14 +227,14 @@ impl Node {
             let rs = election.state.get(proof_round);
             match rs {
                 Some(rs) => {
-                    debug!("Node {}: previous round votes -> {:?}", self.id, rs.votes);
+                    println!("Node {}: previous round votes -> {:?}", self.id, rs.votes);
                 }
                 None => {
-                    debug!("Node {}: round {} have not started yet!", self.id, proof_round);
+                    println!("Node {}: round {} have not started yet!", self.id, proof_round);
                 }
             }
         }
-        debug!("Node {}: {:?} is {:?}", self.id, vote, _state);
+        println!("Node {}: {:?} is {:?}", self.id, vote, _state);
         _state
     }
 
@@ -303,22 +306,28 @@ impl Node {
                     highest_tally = tally.clone();
                     highest = digest.clone();
                 }
+                if tally.initial_count == highest_tally.initial_count {
+                    if digest.clone() > highest {
+                        highest_tally = tally.clone();
+                        highest = digest.clone();
+                    }
+                }
             }
         }
         Vote::new(self.id, round, Transaction::new(tx.parent_hash.clone(), highest.clone()), Initial, None)
         // if tie, vote for the highest hash
     }
 
-    #[async_recursion]
-    pub(crate) async fn send_vote(&mut self, vote: Vote) {
+    //#[async_recursion]
+    pub(crate) fn send_vote(&self, vote: Vote) {
         let round = vote.round;
         if !self.byzantine {
             for i in 0..NUMBER_OF_NODES {
                 let msg = Message::new(self.id,self.peers[i], vote.clone());
                 let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
-                sleep(Duration::from_millis(rand));
+                //sleep(Duration::from_millis(rand));
                 self.sender.send(msg).unwrap();
-                println!("Node {}: sent {:?} to {}", self.id, &vote, i);
+                println!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
             }
         }
         else {
@@ -337,7 +346,7 @@ impl Node {
                     let rand2 = thread_rng().gen_range(0..round-1);
                     let vote = Vote::new(self.id, round, Transaction::new(vote.value.parent_hash.clone(), txs[i].clone()), Initial, Some(rand2));
                     //if vote.is_some() {
-                        println!("Node {}: sent {:?} to {}", self.id, &vote, i);
+                        println!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
                         let msg = Message::new(self.id, self.peers[i],vote.clone());
                         self.sender.send(msg).unwrap();
                     //}

@@ -28,13 +28,15 @@ impl Network {
         }
         for i in 0..NUMBER_OF_NODES {
             if i >= NUMBER_OF_CORRECT_NODES {
-                nodes.insert(pks[i], Arc::new(Mutex::new(Node::new(pks[i], sender.clone(), true, pks.clone()))));
+                nodes.insert(pks[i], Arc::new(Mutex::new(Node::new(pks[i], sender.clone(), false, pks.clone()))));
             }
             else {
                 nodes.insert(pks[i], Arc::new(Mutex::new(Node::new(pks[i], sender.clone(), false, pks.clone()))));
             }
         }
-        println!("nodes: {:?}", nodes.clone());
+        for (pk, node) in nodes.clone() {
+            println!("node {:?}: {:?}", pk, node);
+        }
         Network {
             nodes,
             receiver: Arc::new(Mutex::new(receiver)),
@@ -75,7 +77,7 @@ impl Network {
 
         for (id, node) in &self.nodes {
             let vote = Vote::random(*id,ParentHash(Digest::random()));
-            let mut guard = node.lock().unwrap();
+            let guard = node.lock().unwrap();
             guard.send_vote(vote);
         }
 

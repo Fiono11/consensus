@@ -13,9 +13,11 @@ pub struct Election {
 
 impl Election {
     pub(crate) fn new() -> Election {
+        let mut state = HashMap::new();
+        state.insert(0, RoundState::new());
         Election {
             concurrent_txs: BTreeSet::new(),
-            state: HashMap::new(),
+            state,
             decided_vote: None,
             pending_votes: BTreeSet::new(),
         }
