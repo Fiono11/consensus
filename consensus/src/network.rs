@@ -1,17 +1,18 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
+use crypto::{Digest, PublicKey};
 use crate::constants::NUMBER_OF_CORRECT_NODES;
 use crate::message::Message;
-use crate::node::{Id, Node};
+use crate::node::Node;
 use crate::NUMBER_OF_NODES;
 use crate::vote::Category::Decided;
-use crate::vote::Vote;
+use crate::vote::{ParentHash, Vote};
 
 #[derive(Debug)]
 pub(crate) struct Network {
-    pub(crate) nodes: HashMap<Id, Arc<Mutex<Node>>>,
+    pub(crate) nodes: HashMap<PublicKey, Arc<Mutex<Node>>>,
     receiver: Arc<Mutex<Receiver<Message>>>,
 }
 
@@ -20,12 +21,17 @@ impl Network {
     pub(crate) fn new() -> Self {
         let (sender, receiver) = channel();
         let mut nodes = HashMap::new();
+        let mut pks = Vec::new();
+        for _ in 0..NUMBER_OF_NODES {
+            let pk = PublicKey(Digest::random().0);
+            pks.push(pk);
+        }
         for i in 0..NUMBER_OF_NODES {
             if i >= NUMBER_OF_CORRECT_NODES {
-                nodes.insert(i, Arc::new(Mutex::new(Node::new(i, sender.clone(), true))));
+                nodes.insert(pks[i], Arc::new(Mutex::new(Node::new(pks[i], sender.clone(), true, pks.clone()))));
             }
             else {
-                nodes.insert(i, Arc::new(Mutex::new(Node::new(i, sender.clone(), false))));
+                nodes.insert(pks[i], Arc::new(Mutex::new(Node::new(pks[i], sender.clone(), false, pks.clone()))));
             }
         }
         println!("nodes: {:?}", nodes.clone());
@@ -55,7 +61,7 @@ impl Network {
                     }
                 }
                 if decisions.len() == NUMBER_OF_CORRECT_NODES {
-                    let decision = decisions.get(&0).unwrap();
+                    let decision = decisions.iter().next().unwrap().1;
                     for (_, d) in &decisions {
                         assert_eq!(decision, d);
                     }
@@ -68,8 +74,8 @@ impl Network {
         });
 
         for (id, node) in &self.nodes {
-            let vote = Vote::random_initial(*id);
-            let guard = node.lock().unwrap();
+            let vote = Vote::random(*id,ParentHash(Digest::random()));
+            let mut guard = node.lock().unwrap();
             guard.send_vote(vote);
         }
 
