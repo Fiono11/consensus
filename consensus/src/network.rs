@@ -28,7 +28,7 @@ impl Network {
         }
         for i in 0..NUMBER_OF_NODES {
             if i >= NUMBER_OF_CORRECT_NODES {
-                nodes.insert(pks[i], Arc::new(Mutex::new(Node::new(pks[i], sender.clone(), false, pks.clone()))));
+                nodes.insert(pks[i], Arc::new(Mutex::new(Node::new(pks[i], sender.clone(), true, pks.clone()))));
             }
             else {
                 nodes.insert(pks[i], Arc::new(Mutex::new(Node::new(pks[i], sender.clone(), false, pks.clone()))));

@@ -14,7 +14,7 @@ mod message;
 
 #[test]
 fn test_consensus() {
-    for i in 0..1 {
+    for i in 0..10 {
         let network = Network::new();
         println!("CONSENSUS INSTANCE {} RUNNING...", i);
         network.run();

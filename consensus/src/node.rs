@@ -129,8 +129,8 @@ impl Node {
             }
             None => {
                 println!("Node {}: inserted {:?}", self.id, &vote);
-                election.state.get_mut(&round).unwrap().votes.insert(vote.clone());
                 self.start_new_round(round, tx);
+                self.elections.get_mut(&tx.parent_hash).unwrap().state.get_mut(&round).unwrap().votes.insert(vote.clone());
             }
         }
         //println!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &election.state.get(&vote.round));
@@ -273,20 +273,22 @@ impl Node {
         for (digest, tally) in &tallies {
             if tally.decided_count > 0 {
                 let proof_round = votes.iter().filter(|v| v.category == Decided).next().unwrap().proof_round.unwrap();
-                let vote = Vote::new(self.id, round, tx.clone(), Decided, Some(proof_round));
+                let tx = Transaction::new(tx.parent_hash.clone(), digest.clone());
+                let vote = Vote::new(self.id, round, tx, Decided, Some(proof_round));
                 election.decided_vote = Some(vote.clone());
                 if !self.decided_txs.contains_key(&vote.signer) {
-                    self.decided_txs.insert(self.id, tx.tx_hash.clone());
-                    info!("Decided {:?}", &tx.tx_hash);
+                    self.decided_txs.insert(self.id, digest.clone());
+                    info!("Decided {:?}", &digest);
                 }
                 return vote
             }
             else if tally.final_count >= QUORUM {
-                let vote = Vote::new(self.id, round, tx.clone(), Decided, Some(previous_round));
+                let tx = Transaction::new(tx.parent_hash.clone(), digest.clone());
+                let vote = Vote::new(self.id, round, tx, Decided, Some(previous_round));
                 election.decided_vote = Some(vote.clone());
                 if !self.decided_txs.contains_key(&vote.signer) {
-                    self.decided_txs.insert(self.id, tx.tx_hash.clone());
-                    info!("Decided {:?}", &tx.tx_hash);
+                    self.decided_txs.insert(self.id, digest.clone());
+                    info!("Decided {:?}", &digest);
                 }
                 return vote
             } else if tally.final_count > 0 {
@@ -353,7 +355,7 @@ impl Node {
                     if rand == 1 {
                         category = Decided;
                     }
-                    let rand2 = thread_rng().gen_range(0..round-1);
+                    let rand2 = thread_rng().gen_range(0..round);
                     let vote = Vote::new(self.id, round, Transaction::new(vote.value.parent_hash.clone(), txs[i].clone()), Initial, Some(rand2));
                     //if vote.is_some() {
                         println!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
