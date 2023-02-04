@@ -133,13 +133,14 @@ impl Core {
                 voted_next_round = round_state.voted;
             }
             if votes.len() >= QUORUM && !voted_next_round && self.decided_txs.len() != NUMBER_OF_NODES {
-                /*let &(ref mutex, ref cvar) = &*round_state.timer;
-                let value = mutex.lock().unwrap();
-                let mut value = value;
-                while *value == Timer::Active {
-                    debug!("Node {}: waiting for the round {} to expire...", self.id, round);
-                    value = cvar.wait(value).unwrap();
-                }*/
+                let (mutex, cvar) = &*round_state.timer;
+                {
+                    let mut value = mutex.lock().unwrap();
+                    while *value == Timer::Active {
+                        debug!("Node {}: waiting for the round {} to expire...", self.id, round);
+                        value = cvar.wait(value).unwrap();
+                    }
+                }
                 if election.decided_vote.is_some() {
                     let mut vote = election.decided_vote.as_ref().unwrap().clone();
                     vote.round = round + 1;
