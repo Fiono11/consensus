@@ -46,16 +46,16 @@ impl Node {
     pub(crate) fn start_new_round(&mut self, round: Round, tx: &Transaction) {
         let election = self.elections.get_mut(&tx.parent_hash).unwrap();
         println!("Node {}: started round {}!", self.id, round);
-        let round_state = RoundState::new();
+        let round_state = RoundState::new(round);
         let timer = Arc::clone(&round_state.timer);
         election.state.insert(round, round_state);
-        self.start_timer(timer, round);
+        //self.start_timer(timer, round);
     }
 
     fn start_timer(&self, timer: Arc<(Mutex<Timer>, Condvar)>, round: Round) {
         let id = self.id;
         thread::spawn(move || {
-            //sleep(Duration::from_millis(ROUND_TIMER as u64));
+            sleep(Duration::from_millis(ROUND_TIMER as u64));
             println!("Node {}: round {} expired!", id, round);
             let &(ref mutex, ref cvar) = &*timer;
             let mut value = mutex.lock().unwrap();
@@ -86,7 +86,7 @@ impl Node {
             self.elections.insert(vote.value.parent_hash.clone(), election);
         }
         if self.validate_vote(&vote, tx) == Valid {
-            self.send_vote(vote.clone());
+            //self.send_vote(vote.clone());
             self.insert_vote(vote.clone(), tx);
             self.try_validate_pending_votes(&round, tx);
             let election = self.elections.get_mut(&tx.parent_hash).unwrap();
@@ -96,14 +96,15 @@ impl Node {
             if let Some(round_state) = election.state.get(&(round + 1)) {
                 voted_next_round = round_state.voted;
             }
-            if votes.len() >= QUORUM && !voted_next_round && self.decided_txs.len() != NUMBER_OF_NODES {
-                /*let &(ref mutex, ref cvar) = &*round_state.timer;
+            if votes.len() >= QUORUM && !voted_next_round {//&& self.decided_txs.len() != NUMBER_OF_NODES {
+                let &(ref mutex, ref cvar) = &*round_state.timer;
                 let value = mutex.lock().unwrap();
                 let mut value = value;
+                println!("timer: {:?}", *value);
                 while *value == Timer::Active {
                     println!("Node {}: waiting for the round {} to expire...", self.id, round);
                     value = cvar.wait(value).unwrap();
-                }*/
+                }
                 if election.decided_vote.is_some() {
                     let mut vote = election.decided_vote.as_ref().unwrap().clone();
                     vote.round = round + 1;

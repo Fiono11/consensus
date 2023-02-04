@@ -16,7 +16,7 @@ pub struct Election {
 impl Election {
     pub(crate) fn new() -> Election {
         let mut state = HashMap::new();
-        state.insert(0, RoundState::new());
+        state.insert(0, RoundState::new(0));
         Election {
             concurrent_txs: BTreeSet::new(),
             state,
