@@ -10,7 +10,7 @@ use rand::{Rng, thread_rng};
 use crypto::{Digest, PublicKey};
 use crate::constants::{NUMBER_OF_BYZANTINE_NODES, QUORUM, ROUND_TIMER, VOTE_DELAY};
 use crate::election::{Election, ElectionId};
-use crate::message::Message;
+use crate::message::{Message, Messages, TimerMessage};
 use crate::NUMBER_OF_NODES;
 use crate::round::{Round, RoundState, Timer};
 use crate::tally::tally_votes;
@@ -24,7 +24,7 @@ use async_recursion::async_recursion;
 #[derive(Debug)]
 pub(crate) struct Node {
     id: PublicKey,
-    sender: Sender<Message>,
+    sender: Arc<Mutex<Sender<Messages>>>,
     elections: HashMap<ElectionId, Election>,
     pub(crate) byzantine: bool,
     decided_txs: HashMap<PublicKey, TxHash>,
@@ -32,7 +32,7 @@ pub(crate) struct Node {
 }
 
 impl Node {
-    pub(crate) fn new(id: PublicKey, sender: Sender<Message>, byzantine: bool, peers: Vec<PublicKey>) -> Self {
+    pub(crate) fn new(id: PublicKey, sender: Arc<Mutex<Sender<Messages>>>, byzantine: bool, peers: Vec<PublicKey>) -> Self {
         Node {
             id,
             sender,
@@ -49,31 +49,38 @@ impl Node {
         let round_state = RoundState::new();
         let timer = Arc::clone(&round_state.timer);
         election.state.insert(round, round_state);
-        self.start_timer(timer, round);
+        self.start_timer(tx.parent_hash.clone(), round);
     }
 
-    fn start_timer(&self, timer: Arc<(Mutex<Timer>, Condvar)>, round: Round) {
+    fn start_timer(&self, election_id: ElectionId, round: Round) {
         let id = self.id;
+        let mut sender = self.sender.clone();
         thread::spawn(move || {
-            //sleep(Duration::from_millis(ROUND_TIMER as u64));
+            sleep(Duration::from_millis(ROUND_TIMER as u64));
             println!("Node {}: round {} expired!", id, round);
-            let &(ref mutex, ref cvar) = &*timer;
+            let msg = TimerMessage::new(id, id, election_id, round);
+            sender.lock().unwrap().send(Messages::Timer(msg));
+            /*let &(ref mutex, ref cvar) = &*timer;
             let mut value = mutex.lock().unwrap();
             *value = Timer::Expired;
-            cvar.notify_one();
+            cvar.notify_one();*/
         });
     }
 
-    pub(crate) fn handle_message(&mut self, msg: &Message) {
-        let e = self.elections.get(&msg.vote.value.parent_hash).cloned();
-        match e {
-            Some(election) => {
+    pub(crate) fn handle_message(&mut self, message: &Messages) {
+        match message {
+            Messages::Message(msg) => {
                 self.handle_vote(msg.sender, msg.vote.clone())
             }
-            None => {
-                self.handle_vote(msg.sender, msg.vote.clone())
+            Messages::Timer(timer) => {
+                self.handle_timer(&timer.election_id, &timer.round)
             }
         }
+    }
+
+    fn handle_timer(&mut self, election_id: &ElectionId, round: &Round) {
+        let mut mutex = self.elections.get(election_id).unwrap().state.get(round).unwrap().timer.lock().unwrap();
+        *mutex = Timer::Expired;
     }
 
     //#[async_recursion]
@@ -338,7 +345,7 @@ impl Node {
                 let msg = Message::new(self.id,self.peers[i], vote.clone());
                 let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
                 sleep(Duration::from_millis(rand));
-                self.sender.send(msg).unwrap();
+                self.sender.lock().unwrap().send(Messages::Message(msg)).unwrap();
                 println!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
             }
         }
@@ -360,7 +367,7 @@ impl Node {
                     //if vote.is_some() {
                         println!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
                         let msg = Message::new(self.id, self.peers[i],vote.clone());
-                        self.sender.send(msg).unwrap();
+                        self.sender.lock().unwrap().send(Messages::Message(msg)).unwrap();
                     //}
                 }
             }

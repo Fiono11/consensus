@@ -16,7 +16,7 @@ pub struct RoundState {
     pub(crate) votes: BTreeSet<Vote>,
     pub(crate) voted: bool,
     pub(crate) final_vote: Option<Vote>,
-    pub(crate) timer: Arc<(Mutex<Timer>, Condvar)>,
+    pub(crate) timer: Arc<Mutex<Timer>>,
 }
 
 impl RoundState {
@@ -24,7 +24,7 @@ impl RoundState {
         RoundState {
             votes: BTreeSet::new(),
             voted: false,
-            timer: Arc::new((Mutex::new(Active), Condvar::new())),
+            timer: Arc::new((Mutex::new(Active))),
             final_vote: None,
         }
     }
