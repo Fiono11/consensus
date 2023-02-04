@@ -75,8 +75,9 @@ impl Network {
             }
         });
 
+        let parent_hash = ParentHash(Digest::random());
         for (id, node) in &self.nodes {
-            let vote = Vote::random(*id,ParentHash(Digest::random()));
+            let vote = Vote::random(*id, parent_hash.clone());
             let guard = node.lock().unwrap();
             guard.send_vote(vote);
         }

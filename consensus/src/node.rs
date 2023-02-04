@@ -81,10 +81,12 @@ impl Node {
         println!("Node {}: received {:?} from node {}", self.id, vote, from);
         let tx = &vote.value;
         let round = vote.round;
-        let election = Election::new();
-        self.elections.insert(vote.value.parent_hash.clone(), election);
+        if !self.elections.contains_key(&vote.value.parent_hash) {
+            let election = Election::new();
+            self.elections.insert(vote.value.parent_hash.clone(), election);
+        }
         if self.validate_vote(&vote, tx) == Valid {
-            self.send_vote(vote.clone());
+            //self.send_vote(vote.clone());
             self.insert_vote(vote.clone(), tx);
             self.try_validate_pending_votes(&round, tx);
             let election = self.elections.get_mut(&tx.parent_hash).unwrap();
@@ -116,7 +118,9 @@ impl Node {
     fn insert_vote(&mut self, vote: Vote, tx: &Transaction) {
         let round = vote.round;
         let election= self.elections.get_mut(&tx.parent_hash).unwrap();
+        println!("Txs of node1 {:?}: {:?}", self.id, election.concurrent_txs);
         election.concurrent_txs.insert(tx.tx_hash.clone());
+        println!("Txs of node2 {:?}: {:?}", self.id, election.concurrent_txs);
         let rs = election.state.get_mut(&round);
         match rs {
             Some(round_state) => {
@@ -138,8 +142,8 @@ impl Node {
         self.start_new_round(round, tx);
         //}
         let election = self.elections.get_mut(&tx.parent_hash).unwrap();
-        let concurrent_txs: Vec<TxHash> = election.concurrent_txs.clone().into_iter().collect();
-        let rand = thread_rng().gen_range(0..concurrent_txs.len() + 1);
+        /*let concurrent_txs: Vec<TxHash> = election.concurrent_txs.clone().into_iter().collect();
+        let rand = thread_rng().gen_range(0..(concurrent_txs.len() + 1));
         let rand2 = thread_rng().gen_range(0..3);
         let mut round_state = election.state.get_mut(&round).unwrap().clone();
         let mut category = Initial;
@@ -163,7 +167,13 @@ impl Node {
             round_state.votes.insert(vote.clone());
             round_state.voted = true;
             self.elections.get_mut(&tx.parent_hash).unwrap().state.insert(round, round_state);
-        }
+        }*/
+        let mut round_state = election.state.get_mut(&round).unwrap().clone();
+        let vote = self.decide_vote(&votes, round, tx);
+        round_state.votes.insert(vote.clone());
+        round_state.voted = true;
+        self.send_vote(vote.clone());
+        self.elections.get_mut(&tx.parent_hash).unwrap().state.insert(round, round_state);
     }
 
     fn validate_vote(&mut self, vote: &Vote, tx: &Transaction) -> VoteState {
