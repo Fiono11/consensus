@@ -9,7 +9,7 @@ use log::{debug, info};
 use rand::{Rng, thread_rng};
 use crypto::{Digest, PublicKey};
 use crate::constants::{NUMBER_OF_BYZANTINE_NODES, QUORUM, ROUND_TIMER, VOTE_DELAY};
-use crate::election::Election;
+use crate::election::{Election, ElectionId};
 use crate::message::Message;
 use crate::NUMBER_OF_NODES;
 use crate::round::{Round, RoundState, Timer};
@@ -25,7 +25,7 @@ use async_recursion::async_recursion;
 pub(crate) struct Node {
     id: PublicKey,
     sender: Sender<Message>,
-    elections: HashMap<ParentHash, Election>,
+    elections: HashMap<ElectionId, Election>,
     pub(crate) byzantine: bool,
     decided_txs: HashMap<PublicKey, TxHash>,
     peers: Vec<PublicKey>,
@@ -337,7 +337,7 @@ impl Node {
             for i in 0..NUMBER_OF_NODES {
                 let msg = Message::new(self.id,self.peers[i], vote.clone());
                 let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
-                //sleep(Duration::from_millis(rand));
+                sleep(Duration::from_millis(rand));
                 self.sender.send(msg).unwrap();
                 println!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
             }

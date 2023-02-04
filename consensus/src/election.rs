@@ -1,7 +1,9 @@
 use std::collections::{BTreeSet, HashMap};
 use crypto::Digest;
 use crate::round::{Round, RoundState};
-use crate::vote::{TxHash, Vote};
+use crate::vote::{ParentHash, TxHash, Vote};
+
+pub type ElectionId = ParentHash;
 
 #[derive(Debug, Clone)]
 pub struct Election {
