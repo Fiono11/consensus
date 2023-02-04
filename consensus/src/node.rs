@@ -86,7 +86,7 @@ impl Node {
             self.elections.insert(vote.value.parent_hash.clone(), election);
         }
         if self.validate_vote(&vote, tx) == Valid {
-            //self.send_vote(vote.clone());
+            self.send_vote(vote.clone());
             self.insert_vote(vote.clone(), tx);
             self.try_validate_pending_votes(&round, tx);
             let election = self.elections.get_mut(&tx.parent_hash).unwrap();
@@ -346,7 +346,7 @@ impl Node {
             if round != 0 {
                 for i in 0..NUMBER_OF_NODES {
                     let txs: Vec<TxHash> = self.elections.get(&vote.value.parent_hash).unwrap().clone().concurrent_txs.into_iter().collect();
-                    let i = thread_rng().gen_range(0..txs.len());
+                    let rand = thread_rng().gen_range(0..txs.len());
                     let mut category = Initial;
                     let rand = thread_rng().gen_range(0..3);
                     if rand == 0 {
@@ -356,7 +356,7 @@ impl Node {
                         category = Decided;
                     }
                     let rand2 = thread_rng().gen_range(0..round);
-                    let vote = Vote::new(self.id, round, Transaction::new(vote.value.parent_hash.clone(), txs[i].clone()), Initial, Some(rand2));
+                    let vote = Vote::new(self.id, round, Transaction::new(vote.value.parent_hash.clone(), txs[rand].clone()), Initial, Some(rand2));
                     //if vote.is_some() {
                         println!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
                         let msg = Message::new(self.id, self.peers[i],vote.clone());
