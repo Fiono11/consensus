@@ -1,7 +1,8 @@
 use crypto::PublicKey;
 use crate::vote::Vote;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub(crate) sender: PublicKey,
     pub(crate) receiver: PublicKey,

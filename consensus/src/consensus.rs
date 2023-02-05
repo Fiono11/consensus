@@ -22,8 +22,7 @@ use crate::messages::{Block, TC, Timeout};
 use crate::config::{Committee, Parameters};
 use crate::core::Core;
 use crate::message::Message;
-use crate::Transaction;
-use crate::vote::Vote;
+use crate::vote::{Transaction, Vote};
 
 //#[cfg(test)]
 //#[path = "tests/consensus_tests.rs"]

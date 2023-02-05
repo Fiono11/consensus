@@ -12,14 +12,14 @@ use log::{debug, error, info, warn};
 use rand::{Rng, thread_rng};
 use tokio::sync::mpsc::{channel, Receiver};
 use crate::constants::{NUMBER_OF_BYZANTINE_NODES, QUORUM, ROUND_TIMER, VOTE_DELAY};
-use crate::election::Election;
+use crate::election::{Election, ElectionId};
 use crate::message::Message;
-use crate::{Block, NUMBER_OF_NODES, Transaction};
+use crate::{Block, NUMBER_OF_NODES};
 use crate::round::{Round, RoundState, Timer};
 use crate::tally::tally_votes;
 use crate::vote::Category::{Decided, Final, Initial};
 use crate::vote::Value::{One, Zero};
-use crate::vote::{Value, Vote, VoteState};
+use crate::vote::{Transaction, TxHash, Value, Vote, VoteState};
 use crate::vote::VoteState::{Invalid, Pending, Valid};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use async_recursion::async_recursion;
@@ -43,13 +43,13 @@ pub struct Core {
     signature_service: SignatureService,
     rx_message: Receiver<ConsensusMessage>,
     network: SimpleSender,
-    elections: HashMap<Digest, Election>,
+    elections: HashMap<ElectionId, Election>,
     byzantine: bool,
     /// Channel to receive transactions from the network.
     rx_transaction: Receiver<Transaction>,
     tx_commit: Sender<Block>,
     /// Decided txs
-    decided_txs: HashMap<PublicKey, Digest>,
+    decided_txs: HashMap<PublicKey, TxHash>,
 }
 
 impl Core {
@@ -86,7 +86,7 @@ impl Core {
     pub(crate) fn start_new_round(&mut self, round: Round, tx: &Transaction) {
         let election = self.elections.get_mut(&tx.parent_hash).unwrap();
         debug!("Node {}: started round {}!", self.id, round);
-        let round_state = RoundState::new();
+        let round_state = RoundState::new(round);
         let timer = Arc::clone(&round_state.timer);
         election.state.insert(round, round_state);
         self.start_timer(timer, round);
@@ -176,7 +176,7 @@ impl Core {
             self.start_new_round(round, tx);
         //}
         let election = self.elections.get_mut(&tx.parent_hash).unwrap();
-        let concurrent_txs: Vec<Digest> = election.concurrent_txs.clone().into_iter().collect();
+        let concurrent_txs: Vec<TxHash> = election.concurrent_txs.clone().into_iter().collect();
         let rand = thread_rng().gen_range(0..concurrent_txs.len() + 1);
         let rand2 = thread_rng().gen_range(0..3);
         let mut round_state = election.state.get_mut(&round).unwrap().clone();
