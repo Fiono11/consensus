@@ -85,18 +85,18 @@ impl Core {
 
     pub(crate) fn start_new_round(&mut self, round: Round, tx: &Transaction) {
         let election = self.elections.get_mut(&tx.parent_hash).unwrap();
-        debug!("Node {}: started round {}!", self.id, round);
+        println!("Node {}: started round {}!", self.id, round);
         let round_state = RoundState::new(round);
         let timer = Arc::clone(&round_state.timer);
         election.state.insert(round, round_state);
-        self.start_timer(timer, round);
+        //self.start_timer(timer, round);
     }
 
     fn start_timer(&self, timer: Arc<(Mutex<Timer>, Condvar)>, round: Round) {
         let id = self.id;
         thread::spawn(move || {
-            //sleep(Duration::from_millis(ROUND_TIMER as u64));
-            debug!("Node {}: round {} expired!", id, round);
+            sleep(Duration::from_millis(ROUND_TIMER as u64));
+            println!("Node {}: round {} expired!", id, round);
             let &(ref mutex, ref cvar) = &*timer;
             let mut value = mutex.lock().unwrap();
             *value = Timer::Expired;
@@ -104,25 +104,29 @@ impl Core {
         });
     }
 
-    pub(crate) async fn handle_message(&mut self, msg: &Message) {
+    pub(crate) fn handle_message(&mut self, msg: &Message) {
         let e = self.elections.get(&msg.vote.value.parent_hash).cloned();
         match e {
             Some(election) => {
-                self.handle_vote(msg.sender, msg.vote.clone()).await
+                self.handle_vote(msg.sender, msg.vote.clone())
             }
             None => {
-                self.handle_vote(msg.sender, msg.vote.clone()).await
+                self.handle_vote(msg.sender, msg.vote.clone())
             }
         }
     }
 
     //#[async_recursion]
-    async fn handle_vote(&mut self, from: PublicKey, vote: Vote) {
-        debug!("Node {}: received {:?} from node {}", self.id, vote, from);
+    fn handle_vote(&mut self, from: PublicKey, vote: Vote) {
+        println!("Node {}: received {:?} from node {}", self.id, vote, from);
         let tx = &vote.value;
         let round = vote.round;
+        if !self.elections.contains_key(&vote.value.parent_hash) {
+            let election = Election::new();
+            self.elections.insert(vote.value.parent_hash.clone(), election);
+        }
         if self.validate_vote(&vote, tx) == Valid {
-            self.send_vote(vote.clone());
+            //self.send_vote(vote.clone());
             self.insert_vote(vote.clone(), tx);
             self.try_validate_pending_votes(&round, tx);
             let election = self.elections.get_mut(&tx.parent_hash).unwrap();
@@ -132,21 +136,21 @@ impl Core {
             if let Some(round_state) = election.state.get(&(round + 1)) {
                 voted_next_round = round_state.voted;
             }
-            if votes.len() >= QUORUM && !voted_next_round && self.decided_txs.len() != NUMBER_OF_NODES {
-                let (mutex, cvar) = &*round_state.timer;
-                {
-                    let mut value = mutex.lock().unwrap();
-                    while *value == Timer::Active {
-                        debug!("Node {}: waiting for the round {} to expire...", self.id, round);
-                        value = cvar.wait(value).unwrap();
-                    }
+            if votes.len() >= QUORUM && !voted_next_round {//&& self.decided_txs.len() != NUMBER_OF_NODES {
+                let &(ref mutex, ref cvar) = &*round_state.timer;
+                let value = mutex.lock().unwrap();
+                let mut value = value;
+                println!("timer: {:?}", *value);
+                while *value == Timer::Active {
+                    println!("Node {}: waiting for the round {} to expire...", self.id, round);
+                    value = cvar.wait(value).unwrap();
                 }
                 if election.decided_vote.is_some() {
                     let mut vote = election.decided_vote.as_ref().unwrap().clone();
                     vote.round = round + 1;
-                    self.send_vote(vote).await;
+                    self.send_vote(vote);
                 } else {
-                    self.vote_next_round(round + 1, votes,&vote.value).await;
+                    self.vote_next_round(round + 1, votes,&vote.value);
                 }
             }
         }
@@ -155,29 +159,32 @@ impl Core {
     fn insert_vote(&mut self, vote: Vote, tx: &Transaction) {
         let round = vote.round;
         let election= self.elections.get_mut(&tx.parent_hash).unwrap();
+        println!("Txs of node1 {:?}: {:?}", self.id, election.concurrent_txs);
+        election.concurrent_txs.insert(tx.tx_hash.clone());
+        println!("Txs of node2 {:?}: {:?}", self.id, election.concurrent_txs);
         let rs = election.state.get_mut(&round);
         match rs {
             Some(round_state) => {
-                debug!("Node {}: inserted {:?}", self.id, &vote);
+                println!("Node {}: inserted {:?}", self.id, &vote);
                 round_state.votes.insert(vote.clone());
             }
             None => {
-                debug!("Node {}: inserted {:?}", self.id, &vote);
-                election.state.get_mut(&round).unwrap().votes.insert(vote.clone());
+                println!("Node {}: inserted {:?}", self.id, &vote);
                 self.start_new_round(round, tx);
+                self.elections.get_mut(&tx.parent_hash).unwrap().state.get_mut(&round).unwrap().votes.insert(vote.clone());
             }
         }
-        //debug!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &election.state.get(&vote.round));
+        //println!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &election.state.get(&vote.round));
     }
 
-    #[async_recursion]
-    async fn vote_next_round(&mut self, round: Round, votes: &BTreeSet<Vote>, tx: &Transaction) {
+    //#[async_recursion]
+    fn vote_next_round(&mut self, round: Round, votes: &BTreeSet<Vote>, tx: &Transaction) {
         //if election.state.get_mut(&round).is_none() {
-            self.start_new_round(round, tx);
+        self.start_new_round(round, tx);
         //}
         let election = self.elections.get_mut(&tx.parent_hash).unwrap();
-        let concurrent_txs: Vec<TxHash> = election.concurrent_txs.clone().into_iter().collect();
-        let rand = thread_rng().gen_range(0..concurrent_txs.len() + 1);
+        /*let concurrent_txs: Vec<TxHash> = election.concurrent_txs.clone().into_iter().collect();
+        let rand = thread_rng().gen_range(0..(concurrent_txs.len() + 1));
         let rand2 = thread_rng().gen_range(0..3);
         let mut round_state = election.state.get_mut(&round).unwrap().clone();
         let mut category = Initial;
@@ -197,11 +204,17 @@ impl Core {
         }
         if vote.is_some() {
             let vote = vote.unwrap();
-            self.send_vote(vote.clone()).await;
+            self.send_vote(vote.clone());
             round_state.votes.insert(vote.clone());
             round_state.voted = true;
             self.elections.get_mut(&tx.parent_hash).unwrap().state.insert(round, round_state);
-        }
+        }*/
+        let mut round_state = election.state.get_mut(&round).unwrap().clone();
+        let vote = self.decide_vote(&votes, round, tx);
+        round_state.votes.insert(vote.clone());
+        round_state.voted = true;
+        self.send_vote(vote.clone());
+        self.elections.get_mut(&tx.parent_hash).unwrap().state.insert(round, round_state);
     }
 
     fn validate_vote(&mut self, vote: &Vote, tx: &Transaction) -> VoteState {
@@ -265,14 +278,14 @@ impl Core {
             let rs = election.state.get(proof_round);
             match rs {
                 Some(rs) => {
-                    debug!("Node {}: previous round votes -> {:?}", self.id, rs.votes);
+                    println!("Node {}: previous round votes -> {:?}", self.id, rs.votes);
                 }
                 None => {
-                    debug!("Node {}: round {} have not started yet!", self.id, proof_round);
+                    println!("Node {}: round {} have not started yet!", self.id, proof_round);
                 }
             }
         }
-        debug!("Node {}: {:?} is {:?}", self.id, vote, _state);
+        println!("Node {}: {:?} is {:?}", self.id, vote, _state);
         _state
     }
 
@@ -301,20 +314,22 @@ impl Core {
         for (digest, tally) in &tallies {
             if tally.decided_count > 0 {
                 let proof_round = votes.iter().filter(|v| v.category == Decided).next().unwrap().proof_round.unwrap();
-                let vote = Vote::new(self.id, round, tx.clone(), Decided, Some(proof_round));
+                let tx = Transaction::new(tx.parent_hash.clone(), digest.clone());
+                let vote = Vote::new(self.id, round, tx, Decided, Some(proof_round));
                 election.decided_vote = Some(vote.clone());
                 if !self.decided_txs.contains_key(&vote.signer) {
-                    self.decided_txs.insert(self.id, tx.tx_hash.clone());
-                    info!("Decided {:?}", &tx.tx_hash);
+                    self.decided_txs.insert(self.id, digest.clone());
+                    info!("Decided {:?}", &digest);
                 }
                 return vote
             }
             else if tally.final_count >= QUORUM {
-                let vote = Vote::new(self.id, round, tx.clone(), Decided, Some(previous_round));
+                let tx = Transaction::new(tx.parent_hash.clone(), digest.clone());
+                let vote = Vote::new(self.id, round, tx, Decided, Some(previous_round));
                 election.decided_vote = Some(vote.clone());
                 if !self.decided_txs.contains_key(&vote.signer) {
-                    self.decided_txs.insert(self.id, tx.tx_hash.clone());
-                    info!("Decided {:?}", &tx.tx_hash);
+                    self.decided_txs.insert(self.id, digest.clone());
+                    info!("Decided {:?}", &digest);
                 }
                 return vote
             } else if tally.final_count > 0 {
@@ -344,14 +359,20 @@ impl Core {
                     highest_tally = tally.clone();
                     highest = digest.clone();
                 }
+                if tally.initial_count == highest_tally.initial_count {
+                    if digest.clone() > highest {
+                        highest_tally = tally.clone();
+                        highest = digest.clone();
+                    }
+                }
             }
         }
         Vote::new(self.id, round, Transaction::new(tx.parent_hash.clone(), highest.clone()), Initial, None)
         // if tie, vote for the highest hash
     }
 
-    #[async_recursion]
-    pub(crate) async fn send_vote(&mut self, vote: Vote) {
+    //#[async_recursion]
+    pub(crate) fn send_vote(&mut self, vote: Vote) {
         let round = vote.round;
         let broadcast_addresses = self
             .committee
@@ -362,31 +383,42 @@ impl Core {
             addresses.push(sa);
             public_keys.push(pk);
         }
-        //if !self.byzantine {
+        if !self.byzantine {
             for i in 0..NUMBER_OF_NODES {
-                let msg = Message::new(self.id, public_keys[i], vote.clone());
+                let msg = Message::new(self.id,public_keys[i], vote.clone());
                 let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
-                //sleep(Duration::from_millis(rand));
+                sleep(Duration::from_millis(rand));
                 let message = bincode::serialize(&ConsensusMessage::Message(msg))
                     .expect("Failed to serialize vote");
-                self.network.send(addresses[i], Bytes::from(message)).await;
-                debug!("Node {}: sent {:?} to {}", self.id, &vote, i);
+                self.network.send(addresses[i], Bytes::from(message));
+                println!("Node {}: sent {:?} to {}", self.id, &vote, public_keys[i]);
             }
-        //}
-        /*else {
+        }
+        else {
             if round != 0 {
                 for i in 0..NUMBER_OF_NODES {
-                    let vote = Vote::random(self.id, round);
-                    if vote.is_some() {
-                        debug!("Node {}: sent {:?} to {}", self.id, &vote, i);
-                        let msg = Message::new(self.id, public_keys[i],vote.unwrap().clone());
-                        let message = bincode::serialize(&ConsensusMessage::Message(msg))
-                            .expect("Failed to serialize vote");
-                        self.network.send(addresses[i], Bytes::from(message)).await;
+                    let txs: Vec<TxHash> = self.elections.get(&vote.value.parent_hash).unwrap().clone().concurrent_txs.into_iter().collect();
+                    let rand = thread_rng().gen_range(0..txs.len());
+                    let mut category = Initial;
+                    let rand = thread_rng().gen_range(0..3);
+                    if rand == 0 {
+                        category = Final;
                     }
+                    if rand == 1 {
+                        category = Decided;
+                    }
+                    let rand2 = thread_rng().gen_range(0..round);
+                    let vote = Vote::new(self.id, round, Transaction::new(vote.value.parent_hash.clone(), txs[rand].clone()), Initial, Some(rand2));
+                    //if vote.is_some() {
+                    println!("Node {}: sent {:?} to {}", self.id, &vote, public_keys[i]);
+                    let msg = Message::new(self.id, public_keys[i],vote.clone());
+                    let message = bincode::serialize(&ConsensusMessage::Message(msg))
+                        .expect("Failed to serialize vote");
+                    self.network.send(addresses[i], Bytes::from(message));
+                    //}
                 }
             }
-        }*/
+        }
     }
 
     pub async fn run(&mut self) {
@@ -404,15 +436,7 @@ impl Core {
                 Some(message) = self.rx_message.recv() => match message {
                     //ConsensusMessage::Propose(block) => self.handle_proposal(&block).await,
                     ConsensusMessage::Message(msg) => {
-                        let e = self.elections.get(&msg.vote.value.parent_hash).cloned();
-                        match e {
-                            Some(election) => {
-                                self.handle_vote(msg.sender, msg.vote.clone()).await
-                            }
-                            None => {
-                                self.handle_vote(msg.sender, msg.vote.clone()).await
-                            }
-                        }
+                        self.handle_vote(msg.sender, msg.vote.clone())
                     }
                     //ConsensusMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
                     //ConsensusMessage::TC(tc) => self.handle_tc(tc).await,
@@ -422,7 +446,7 @@ impl Core {
                     info!("Received {:?}", transaction.tx_hash);
                     //let vote = Vote::random_initial(self.id);
                     let vote = Vote::new(self.id, 0, transaction.clone(), Initial, None);
-                    self.send_vote(vote).await;
+                    self.send_vote(vote);
                 },
                 //Some(block) = self.rx_loopback.recv() => self.process_block(&block).await,
                 //() = &mut self.timer => self.local_timeout_round().await,
