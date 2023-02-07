@@ -35,7 +35,7 @@ impl Network {
             }
         }
         for (pk, node) in nodes.clone() {
-            println!("node {:?}: {:?}", pk, node);
+            debug!("node {:?}: {:?}", pk, node);
         }
         Network {
             nodes,
@@ -59,7 +59,7 @@ impl Network {
                 if vote.category == Decided && !nodes.get(&vote.signer).unwrap().lock().unwrap().byzantine {
                     let insert = decisions.insert((sender, vote.value.clone()));
                     //if insert.is_none() {
-                        println!("Node {} decided value {:?} in round {}", sender, &vote.value, round);
+                        debug!("Node {} decided value {:?} in round {}", sender, &vote.value, round);
                     //}
                 }
                 if decisions.len() == NUMBER_OF_CORRECT_NODES * NUMBER_OF_TXS {
@@ -69,7 +69,7 @@ impl Network {
                             assert_eq!(&decision.tx_hash, &d.tx_hash);
                         }
                     }
-                    println!("CONSENSUS ACHIEVED!!!");
+                    debug!("CONSENSUS ACHIEVED!!!");
                     break;
                 }
                 let node = nodes.get_mut(&receiver).unwrap();

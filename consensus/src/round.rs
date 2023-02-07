@@ -3,6 +3,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
+use log::debug;
 use crate::constants::ROUND_TIMER;
 use crate::round::Timer::Active;
 use crate::vote::Vote;
@@ -29,7 +30,7 @@ impl RoundState {
         let timer = Arc::clone(&a);
         thread::spawn(move || {
             sleep(Duration::from_millis(ROUND_TIMER as u64));
-            println!("round {} expired!", round);
+            debug!("round {} expired!", round);
             let &(ref mutex, ref cvar) = &*timer;
             let mut value = mutex.lock().unwrap();
             *value = Timer::Expired;

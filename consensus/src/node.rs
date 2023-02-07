@@ -45,7 +45,7 @@ impl Node {
 
     pub(crate) fn start_new_round(&mut self, round: Round, tx: &Transaction) {
         let election = self.elections.get_mut(&tx.parent_hash).unwrap();
-        println!("Node {}: started round {}!", self.id, round);
+        debug!("Node {}: started round {}!", self.id, round);
         let round_state = RoundState::new(round);
         let timer = Arc::clone(&round_state.timer);
         election.state.insert(round, round_state);
@@ -56,7 +56,7 @@ impl Node {
         let id = self.id;
         thread::spawn(move || {
             sleep(Duration::from_millis(ROUND_TIMER as u64));
-            println!("Node {}: round {} expired!", id, round);
+            debug!("Node {}: round {} expired!", id, round);
             let &(ref mutex, ref cvar) = &*timer;
             let mut value = mutex.lock().unwrap();
             *value = Timer::Expired;
@@ -78,7 +78,7 @@ impl Node {
 
     //#[async_recursion]
     fn handle_vote(&mut self, from: PublicKey, vote: Vote) {
-        println!("Node {}: received {:?} from node {}", self.id, vote, from);
+        debug!("Node {}: received {:?} from node {}", self.id, vote, from);
         let tx = &vote.value;
         let round = vote.round;
         if !self.elections.contains_key(&vote.value.parent_hash) {
@@ -100,9 +100,9 @@ impl Node {
                 let &(ref mutex, ref cvar) = &*round_state.timer;
                 let value = mutex.lock().unwrap();
                 let mut value = value;
-                println!("timer: {:?}", *value);
+                debug!("timer: {:?}", *value);
                 while *value == Timer::Active {
-                    println!("Node {}: waiting for the round {} to expire...", self.id, round);
+                    debug!("Node {}: waiting for the round {} to expire...", self.id, round);
                     value = cvar.wait(value).unwrap();
                 }
                 if election.decided_vote.is_some() {
@@ -119,22 +119,22 @@ impl Node {
     fn insert_vote(&mut self, vote: Vote, tx: &Transaction) {
         let round = vote.round;
         let election= self.elections.get_mut(&tx.parent_hash).unwrap();
-        println!("Txs of node1 {:?}: {:?}", self.id, election.concurrent_txs);
+        debug!("Txs of node1 {:?}: {:?}", self.id, election.concurrent_txs);
         election.concurrent_txs.insert(tx.tx_hash.clone());
-        println!("Txs of node2 {:?}: {:?}", self.id, election.concurrent_txs);
+        debug!("Txs of node2 {:?}: {:?}", self.id, election.concurrent_txs);
         let rs = election.state.get_mut(&round);
         match rs {
             Some(round_state) => {
-                println!("Node {}: inserted {:?}", self.id, &vote);
+                debug!("Node {}: inserted {:?}", self.id, &vote);
                 round_state.votes.insert(vote.clone());
             }
             None => {
-                println!("Node {}: inserted {:?}", self.id, &vote);
+                debug!("Node {}: inserted {:?}", self.id, &vote);
                 self.start_new_round(round, tx);
                 self.elections.get_mut(&tx.parent_hash).unwrap().state.get_mut(&round).unwrap().votes.insert(vote.clone());
             }
         }
-        //println!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &election.state.get(&vote.round));
+        //debug!("Node {}: votes of round {} -> {:?}", self.id, &vote.round, &election.state.get(&vote.round));
     }
 
     //#[async_recursion]
@@ -238,14 +238,14 @@ impl Node {
             let rs = election.state.get(proof_round);
             match rs {
                 Some(rs) => {
-                    println!("Node {}: previous round votes -> {:?}", self.id, rs.votes);
+                    debug!("Node {}: previous round votes -> {:?}", self.id, rs.votes);
                 }
                 None => {
-                    println!("Node {}: round {} have not started yet!", self.id, proof_round);
+                    debug!("Node {}: round {} have not started yet!", self.id, proof_round);
                 }
             }
         }
-        println!("Node {}: {:?} is {:?}", self.id, vote, _state);
+        debug!("Node {}: {:?} is {:?}", self.id, vote, _state);
         _state
     }
 
@@ -340,7 +340,7 @@ impl Node {
                 let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
                 sleep(Duration::from_millis(rand));
                 self.sender.send(msg).unwrap();
-                println!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
+                debug!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
             }
         }
         else {
@@ -359,7 +359,7 @@ impl Node {
                     let rand2 = thread_rng().gen_range(0..round);
                     let vote = Vote::new(self.id, round, Transaction::new(vote.value.parent_hash.clone(), txs[rand].clone()), Initial, Some(rand2));
                     //if vote.is_some() {
-                        println!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
+                        debug!("Node {}: sent {:?} to {}", self.id, &vote, self.peers[i]);
                         let msg = Message::new(self.id, self.peers[i],vote.clone());
                         self.sender.send(msg).unwrap();
                     //}

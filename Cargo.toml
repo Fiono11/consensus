@@ -1,2 +1,2 @@
 [workspace]
-members = ["crypto", "consensus"]
+members = ["crypto", "consensus", "network", "node", "store"]
