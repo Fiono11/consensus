@@ -247,7 +247,7 @@ impl Core {
             }
         }
         debug!("Inserted decided tx: {:?}", (id, &tx_hash));
-        if self.decided_txs.get(&parent_hash).unwrap().len() > 0 {
+        if self.decided_txs.get(&parent_hash).unwrap().len() == NUMBER_OF_NODES {
             debug!("Election {:?} is finished!", &parent_hash);
             self.elections.get_mut(&parent_hash).unwrap().active = false;
         }
@@ -402,7 +402,7 @@ impl Core {
                 let vote = Vote::new(self.id, round, tx.clone(), Decided, Some(proof_round));
                 self.elections.get_mut(&tx.parent_hash).unwrap().decided_vote = Some(vote.clone());
                 //if !self.decided_txs.contains_key(&vote.signer) {
-                    self.insert_decided(self.id, digest.clone(), tx.parent_hash);
+                    //self.insert_decided(self.id, digest.clone(), tx.parent_hash);
                     info!("Decided {:?}", &digest);
                 //}
                 return vote
@@ -412,7 +412,7 @@ impl Core {
                 let vote = Vote::new(self.id, round, tx.clone(), Decided, Some(previous_round));
                 self.elections.get_mut(&tx.parent_hash).unwrap().decided_vote = Some(vote.clone());
                 //if !self.decided_txs.contains_key(&vote.signer) {
-                self.insert_decided(self.id, digest.clone(), tx.parent_hash);
+                //self.insert_decided(self.id, digest.clone(), tx.parent_hash);
                     info!("Decided {:?}", &digest);
                 //}
                 return vote
@@ -550,6 +550,9 @@ impl Core {
 
     async fn insert_vote(&mut self, vote: Vote) {
         debug!("Inserted {:?}", vote);
+        if vote.category == Decided {
+            self.insert_decided(vote.signer.clone(), vote.value.tx_hash.clone(), vote.value.parent_hash.clone());
+        }
         self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&vote.round).unwrap().votes.insert(vote);
     }
 
@@ -574,7 +577,7 @@ impl Core {
         let election_active = self.elections.get(&vote.value.parent_hash).unwrap().active;
         if votes.len() > QUORUM && !voted_next_round && election_active {
             let vote = self.decide_vote(&votes, next_round, &vote.value).await;
-            match self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&next_round) {
+            /*match self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&next_round) {
                 Some(rs) => {
                     rs.voted = true;
                 }
@@ -584,7 +587,9 @@ impl Core {
                     debug!("Started round {:?} of election {:?}", &next_round, &vote.value.parent_hash);
                     self.elections.get_mut(&vote.value.parent_hash).unwrap().state.insert(next_round,round_state);
                 }
-            }
+            }*/
+            self.start_round(vote.clone()).await;
+            self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&next_round).unwrap().voted = true;
             self.send_vote(vote.clone()).await;
         }
     }
