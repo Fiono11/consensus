@@ -4,6 +4,7 @@ use crate::vote::Category::{Decided, Final, Initial};
 use crate::vote::Value::{One, Zero};
 use crate::vote::{TxHash, Vote};
 
+#[derive(Clone, Debug)]
 pub struct Tally {
     pub initial_count: usize,
     pub final_count: usize,

@@ -11,6 +11,7 @@ pub struct Election {
     pub(crate) state: HashMap<Round, RoundState>,
     pub(crate) decided_vote: Option<Vote>,
     pub(crate) pending_votes: BTreeSet<Vote>,
+    pub(crate) active: bool,
 }
 
 impl Election {
@@ -22,6 +23,7 @@ impl Election {
             state,
             decided_vote: None,
             pending_votes: BTreeSet::new(),
+            active: true,
         }
     }
 }

@@ -15,6 +15,7 @@ use log::{debug, info};
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::net::SocketAddr;
 use store::Store;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use crate::error::ConsensusError;
@@ -98,6 +99,15 @@ impl Consensus {
 
         //info!("Mempool listening to client transactions on {}", tx_address);
 
+        let broadcast_addresses = committee
+            .broadcast_addresses(&name);
+        let mut addresses: Vec<SocketAddr> = Vec::new();
+        let mut public_keys: Vec<PublicKey> = Vec::new();
+        for (pk, sa) in broadcast_addresses {
+            addresses.push(sa);
+            public_keys.push(pk);
+        }
+
         // Spawn the consensus core.
         Core::spawn(
             name,
@@ -107,7 +117,8 @@ impl Consensus {
             rx_vote,
             false,
             rx_transaction,
-            tx_commit
+            tx_commit,
+            (public_keys, addresses),
         );
     }
 }
