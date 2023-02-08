@@ -133,7 +133,7 @@ struct ConsensusReceiverHandler {
 #[async_trait]
 impl MessageHandler for ConsensusReceiverHandler {
     async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
-        debug!("Received consensus message!");
+        //debug!("Received consensus message!");
         // Reply with an ACK.
         //let _ = writer.send(Bytes::from("Ack")).await;
         // Deserialize and parse the message.
@@ -147,14 +147,14 @@ impl MessageHandler for ConsensusReceiverHandler {
 
         match bincode::deserialize(&serialized).map_err(DagError::SerializationError)? {
             ConsensusMessage::Transaction(tx) => {
-                info!("Received tx!");
+                //info!("Received tx!");
                 self.tx_transaction
                     .send(tx)
                     .await
                     .expect("Failed to send transaction")
             },
             ConsensusMessage::Message(msg) => {
-                info!("Received vote!");
+                //info!("Received vote!");
                 self.tx_vote
                     .send(msg.vote)
                     .await
