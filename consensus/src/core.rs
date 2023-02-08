@@ -1,5 +1,4 @@
 use std::collections::{BTreeSet, HashMap};
-use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::{Arc, Condvar, Mutex};
 use tokio::sync::mpsc::Sender;
@@ -8,7 +7,7 @@ use std::thread::sleep;
 use std::time::Duration;
 use bytes::Bytes;
 use futures::task::SpawnExt;
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use rand::{Rng, thread_rng};
 use tokio::sync::mpsc::{channel, Receiver};
 use crate::constants::{NUMBER_OF_BYZANTINE_NODES, NUMBER_OF_CORRECT_NODES, NUMBER_OF_TXS, QUORUM, ROUND_TIMER, VOTE_DELAY};
@@ -21,18 +20,20 @@ use crate::vote::Category::{Decided, Final, Initial};
 use crate::vote::Value::{One, Zero};
 use crate::vote::{Transaction, TxHash, Value, Vote, VoteState};
 use crate::vote::VoteState::{Invalid, Pending, Valid};
-use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
+use network::{CancelHandler, MessageHandler, Receiver as NetworkReceiver, ReliableSender, Writer};
 use async_recursion::async_recursion;
+use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use thiserror::Error;
 
 //#[cfg(test)]
 //#[path = "tests/core_tests.rs"]
 //pub mod core_tests;
 
-use crypto::{Digest, PublicKey, SignatureService};
+use crypto::{CryptoError, Digest, PublicKey, SignatureService};
 use network::SimpleSender;
-use store::Store;
-use crate::config::Committee;
+use store::{Store, StoreError};
+use crate::config::{Committee, Stake};
 use crate::consensus::{CHANNEL_CAPACITY, ConsensusMessage};
 use crate::error::ConsensusError;
 
@@ -41,8 +42,8 @@ pub struct Core {
     committee: Committee,
     store: Store,
     signature_service: SignatureService,
-    rx_message: Receiver<ConsensusMessage>,
-    network: SimpleSender,
+    rx_vote: Receiver<Vote>,
+    network: ReliableSender,
     elections: Mutex<HashMap<ElectionId, Election>>,
     byzantine: bool,
     /// Channel to receive transactions from the network.
@@ -50,6 +51,8 @@ pub struct Core {
     tx_commit: Sender<Block>,
     /// Decided txs
     decided_txs: Mutex<HashMap<PublicKey, BTreeSet<TxHash>>>,
+    /// Keeps the cancel handlers of the messages we sent.
+    cancel_handlers: HashMap<Round, Vec<CancelHandler>>,
 }
 
 impl Core {
@@ -59,7 +62,7 @@ impl Core {
         committee: Committee,
         signature_service: SignatureService,
         store: Store,
-        rx_message: Receiver<ConsensusMessage>,
+        rx_message: Receiver<Vote>,
         byzantine: bool,
         rx_transaction: Receiver<Transaction>,
         tx_commit: Sender<Block>,
@@ -70,20 +73,21 @@ impl Core {
                 committee: committee.clone(),
                 signature_service,
                 store,
-                rx_message,
-                network: SimpleSender::new(),
+                rx_vote: rx_message,
+                network: ReliableSender::new(),
                 elections: Mutex::new(HashMap::new()),
                 byzantine,
                 rx_transaction,
                 tx_commit,
                 decided_txs: Mutex::new(HashMap::new()),
+                cancel_handlers: HashMap::new(),
             }
             .run()
             .await
         });
     }
 
-    pub(crate) fn start_new_round(&mut self, round: Round, tx: &Transaction) {
+    /*pub(crate) fn start_new_round(&mut self, round: Round, tx: &Transaction) {
         //let election = self.elections.lock().unwrap().get_mut(&tx.parent_hash).unwrap();
         debug!("Node {}: started round {}!", self.id, round);
         let round_state = RoundState::new(round);
@@ -445,45 +449,120 @@ impl Core {
                 }
             }
         }
+    }*/
+
+    async fn insert_vote(&mut self, vote: Vote) {
+        match self.elections.lock().unwrap().get_mut(&vote.value.parent_hash) {
+            Some(election) => {
+                election.concurrent_txs.insert(vote.value.tx_hash.clone());
+                debug!("Txs of node1 {:?}: {:?}", self.id, &election.concurrent_txs);
+            }
+            None => {
+                let mut election = Election::new();
+                election.concurrent_txs.insert(vote.value.tx_hash.clone());
+                debug!("Txs of node2 {:?}: {:?}", self.id, &election.concurrent_txs);
+                self.elections.lock().unwrap().insert(vote.value.parent_hash, election);
+            }
+        }
     }
 
-    pub async fn run(&mut self) {
-        // Upon booting, generate the very first block (if we are the leader).
-        // Also, schedule a timer in case we don't hear from the leader.
-        //self.timer.reset();
-        //if self.name == self.leader_elector.get_leader(self.round) {
-            //self.generate_proposal(None).await;
-        //}
+    async fn handle_vote(&mut self, vote: Vote) {
+        info!("Received {:?}", &vote);
+        self.insert_vote(vote).await;
+    }
 
-        // This is the main loop: it processes incoming blocks and votes,
-        // and receive timeout notifications from our Timeout Manager.
+    async fn send_vote(&mut self, vote: Vote) {
+        let broadcast_addresses = self
+            .committee
+            .broadcast_addresses(&self.id);
+        let mut addresses: Vec<SocketAddr> = Vec::new();
+        let mut public_keys: Vec<PublicKey> = Vec::new();
+        debug!("Node {}: broadcast {:?} to {:?}", self.id, &vote, &broadcast_addresses);
+        for (pk, sa) in broadcast_addresses {
+            addresses.push(sa);
+            public_keys.push(pk);
+        }
+        let msg = Message::new(self.id, vote.clone());
+        let message = bincode::serialize(&ConsensusMessage::Message(msg))
+            .expect("Failed to serialize vote");
+
+        let handlers = self.network.broadcast(addresses, Bytes::from(message)).await;
+        self.cancel_handlers
+            .entry(vote.round)
+            .or_insert_with(Vec::new)
+            .extend(handlers);
+    }
+
+    /// Helper function. It waits for a future to complete and then delivers a value.
+    async fn waiter(wait_for: CancelHandler, deliver: Stake) -> Stake {
+        let _ = wait_for.await;
+        deliver
+    }
+
+    async fn run(&mut self) {
         loop {
-            let result = tokio::select! {
-                Some(message) = self.rx_message.recv() => match message {
-                    //ConsensusMessage::Propose(block) => self.handle_proposal(&block).await,
-                    ConsensusMessage::Message(msg) => {
-                        self.handle_vote(msg.sender, msg.vote.clone()).await
-                    }
-                    //ConsensusMessage::Timeout(timeout) => self.handle_timeout(&timeout).await,
-                    //ConsensusMessage::TC(tc) => self.handle_tc(tc).await,
-                    _ => panic!("Unexpected protocol message")
+            //let result =
+            tokio::select! {
+                Some(vote) = self.rx_vote.recv() => {
+                    //ConsensusMessage::Message(msg) => {
+                        info!("Received!");
+                        self.send_vote(vote).await;
+                        //self.handle_vote(vote.clone()).await;
+                    //}
+                    //_ => panic!("Unexpected protocol message")
                 },
                 Some(transaction) = self.rx_transaction.recv() => {
                     info!("Received {:?}", transaction.tx_hash);
-                    //let vote = Vote::random_initial(self.id);
                     let vote = Vote::new(self.id, 0, transaction.clone(), Initial, None);
                     self.send_vote(vote).await;
                 },
-                //Some(block) = self.rx_loopback.recv() => self.process_block(&block).await,
-                //() = &mut self.timer => self.local_timeout_round().await,
             };
-            /*match result {
-                Ok(()) => (),
-                Err(ConsensusError::StoreError(e)) => error!("{}", e),
-                Err(ConsensusError::SerializationError(e)) => error!("Store corrupted. {}", e),
-                Err(e) => warn!("{}", e),
-            }*/
+            //match result {
+                //Ok(()) => (),
+                //Err(e) => warn!("{}", e),
+            //}
+
+            // Give the change to schedule other tasks.
+            tokio::task::yield_now().await;
         }
     }
+}
+
+pub type DagResult<T> = Result<T, DagError>;
+
+#[derive(Debug, Error)]
+pub enum DagError {
+    #[error("Invalid signature")]
+    InvalidSignature(#[from] CryptoError),
+
+    #[error("Storage failure: {0}")]
+    StoreError(#[from] StoreError),
+
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] Box<bincode::ErrorKind>),
+
+    #[error("Invalid header id")]
+    InvalidHeaderId,
+
+    #[error("Malformed header {0}")]
+    MalformedHeader(Digest),
+
+    #[error("Received message from unknown authority {0}")]
+    UnknownAuthority(PublicKey),
+
+    #[error("Authority {0} appears in quorum more than once")]
+    AuthorityReuse(PublicKey),
+
+    #[error("Received unexpected vote fo header {0}")]
+    UnexpectedVote(Digest),
+
+    #[error("Received certificate without a quorum")]
+    CertificateRequiresQuorum,
+
+    #[error("Parents of header {0} are not a quorum")]
+    HeaderRequiresQuorum(Digest),
+
+    #[error("Message {0} (round {1}) too old")]
+    TooOld(Digest, Round),
 }
 

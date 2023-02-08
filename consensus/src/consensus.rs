@@ -20,7 +20,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 use crate::error::ConsensusError;
 use crate::messages::{Block, TC, Timeout};
 use crate::config::{Committee, Parameters};
-use crate::core::Core;
+use crate::core::{Core, DagError};
 use crate::message::Message;
 use crate::vote::{Transaction, Vote};
 
@@ -36,6 +36,7 @@ pub type Round = u64;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ConsensusMessage {
+    Transaction(Transaction),
     //Propose(Block),
     //Vote(Vote),
     Message(Message),
@@ -59,7 +60,7 @@ impl Consensus {
         // NOTE: This log entry is used to compute performance.
         parameters.log();
 
-        let (tx_consensus, rx_consensus) = channel(CHANNEL_CAPACITY);
+        let (tx_vote, rx_vote) = channel(CHANNEL_CAPACITY);
         let (tx_transaction, rx_transaction) = channel(CHANNEL_CAPACITY);
 
         // Spawn the network receiver.
@@ -69,7 +70,7 @@ impl Consensus {
         address.set_ip("0.0.0.0".parse().unwrap());
 
         // We first receive clients' transactions from the network.
-        let mut tx_address = committee
+        /*let mut tx_address = committee
             .transactions_address(&name)
             .expect("Our public key is not in the committee");
         tx_address.set_ip("0.0.0.0".parse().unwrap());
@@ -80,13 +81,13 @@ impl Consensus {
             TxReceiverHandler {
                 tx_transaction,
             },
-        );
+        );*/
 
         NetworkReceiver::spawn(
             address,
             /* handler */
             ConsensusReceiverHandler {
-                tx_consensus,
+                tx_vote, tx_transaction
             },
         );
 
@@ -95,7 +96,7 @@ impl Consensus {
             name, address
         );
 
-        info!("Mempool listening to client transactions on {}", tx_address);
+        //info!("Mempool listening to client transactions on {}", tx_address);
 
         // Spawn the consensus core.
         Core::spawn(
@@ -103,7 +104,7 @@ impl Consensus {
             committee.clone(),
             signature_service.clone(),
             store.clone(),
-            rx_consensus,
+            rx_vote,
             false,
             rx_transaction,
             tx_commit
@@ -114,26 +115,50 @@ impl Consensus {
 /// Defines how the network receiver handles incoming primary messages.
 #[derive(Clone)]
 struct ConsensusReceiverHandler {
-    tx_consensus: Sender<ConsensusMessage>,
+    tx_vote: Sender<Vote>,
+    tx_transaction: Sender<Transaction>,
 }
 
 #[async_trait]
 impl MessageHandler for ConsensusReceiverHandler {
-    async fn dispatch(&self, _writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
+    async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
         debug!("Received consensus message!");
+        // Reply with an ACK.
+        //let _ = writer.send(Bytes::from("Ack")).await;
         // Deserialize and parse the message.
-        match bincode::deserialize(&serialized).map_err(ConsensusError::SerializationError)? {
+        /*match bincode::deserialize(&serialized).map_err(ConsensusError::SerializationError)? {
             message => self
                 .tx_consensus
                 .send(message)
                 .await
                 .expect("Failed to consensus message"),
+        }*/
+
+        match bincode::deserialize(&serialized).map_err(DagError::SerializationError)? {
+            ConsensusMessage::Transaction(tx) => {
+                info!("Received tx!");
+                self.tx_transaction
+                    .send(tx)
+                    .await
+                    .expect("Failed to send transaction")
+            },
+            ConsensusMessage::Message(msg) => {
+                info!("Received vote!");
+                self.tx_vote
+                    .send(msg.vote)
+                    .await
+                    .expect("Failed to send vote")
+            },
+            //Err(e) => warn!("Serialization error: {}", e),
         }
+
+        // Give the change to schedule other tasks.
+        tokio::task::yield_now().await;
         Ok(())
     }
 }
 
-/// Defines how the network receiver handles incoming transactions.
+/*/// Defines how the network receiver handles incoming transactions.
 #[derive(Clone)]
 struct TxReceiverHandler {
     tx_transaction: Sender<Transaction>,
@@ -155,5 +180,5 @@ impl MessageHandler for TxReceiverHandler {
         tokio::task::yield_now().await;
         Ok(())
     }
-}
+}*/
 

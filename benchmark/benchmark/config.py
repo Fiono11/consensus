@@ -27,7 +27,8 @@ class Committee:
 
         self.names = names
         self.consensus = consensus_addr
-        self.front = transactions_addr
+        #self.front = transactions_addr
+        self.front = consensus_addr
         self.mempool = mempool_addr
 
         self.json = {

@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use consensus::Transaction;
+use consensus::{ConsensusMessage, Transaction};
 
 #[derive(Parser)]
 #[clap(
@@ -95,7 +95,7 @@ impl Client {
 
         // Submit all transactions.
         let burst = self.rate / PRECISION;
-        let message = bincode::serialize(&Transaction::random()).unwrap();
+        let message = bincode::serialize(&ConsensusMessage::Transaction(Transaction::random())).unwrap();
         let tx = Bytes::from(message);
         //let mut tx = BytesMut::with_capacity(self.size);
         let mut counter = 0;

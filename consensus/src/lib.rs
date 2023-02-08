@@ -1,8 +1,10 @@
+use log::debug;
 use crate::constants::NUMBER_OF_NODES;
 pub use crate::messages::Block;
 pub use crate::consensus::Consensus;
 pub use crate::config::{Committee, Parameters};
 pub use crate::vote::Transaction;
+pub use crate::consensus::ConsensusMessage;
 
 mod constants;
 mod election;
