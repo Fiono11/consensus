@@ -37,6 +37,13 @@ impl Transaction {
         }
     }
 
+    pub fn default() -> Self {
+        Self {
+            parent_hash: ParentHash(Digest::default()),
+            tx_hash: TxHash(Digest::random()),
+        }
+    }
+
     pub fn random() -> Self {
         Self {
             parent_hash: ParentHash(Digest::random()),

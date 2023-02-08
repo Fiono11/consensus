@@ -95,7 +95,7 @@ impl Client {
 
         // Submit all transactions.
         let burst = self.rate / PRECISION;
-        let message = bincode::serialize(&ConsensusMessage::Transaction(Transaction::random())).unwrap();
+        let message = bincode::serialize(&ConsensusMessage::Transaction(Transaction::default())).unwrap();
         let tx = Bytes::from(message);
         //let mut tx = BytesMut::with_capacity(self.size);
         let mut counter = 0;
