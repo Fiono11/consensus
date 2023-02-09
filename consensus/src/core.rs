@@ -632,13 +632,13 @@ impl Core {
                     //ConsensusMessage::Message(msg) => {
                         //info!("Received!");
                         //self.send_vote(vote).await;
-                    if self.byzantine && !self.elections.get(&vote.value.parent_hash).unwrap().state.get(&vote.round).unwrap().voted {
-                        self.send_vote(vote.clone()).await;
-                        self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&vote.round).unwrap().voted = true;
-                    }
-                    else {
+                    //if self.byzantine && !self.elections.get(&vote.value.parent_hash).unwrap().state.get(&vote.round).unwrap().voted {
+                        //self.send_vote(vote.clone()).await;
+                        //self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&vote.round).unwrap().voted = true;
+                    //}
+                    //else {
                         self.handle_vote(vote.clone()).await;
-                    }
+                    //}
                     //}
                     //_ => panic!("Unexpected protocol message")
                 },
