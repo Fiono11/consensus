@@ -103,6 +103,32 @@ class LocalBench:
                 )
                 self._background_run(cmd, log_file)
 
+            '''addresses = committee.primary_addresses(self.faults)
+            number_of_nodes = len(addresses)
+            number_of_byzantine_nodes = (number_of_nodes - 1) / 3;
+            number_of_honest_nodes = number_of_nodes - number_of_byzantine_nodes
+            for i, address in enumerate(addresses):
+                if i < number_of_honest_nodes:
+                    cmd = CommandMaker.run_node(
+                        key_files[i],
+                        PathMaker.committee_file(),
+                        dbs[i],
+                        PathMaker.parameters_file(),
+                        'false',
+                        debug=debug
+                    )
+                else:
+                    cmd = CommandMaker.run_node(
+                        key_files[i],
+                        PathMaker.committee_file(),
+                        dbs[i],
+                        PathMaker.parameters_file(),
+                        'true',
+                        debug=debug
+                    )
+                log_file = node_logs[i]
+                self._background_run(cmd, log_file)'''
+
             # Wait for the nodes to synchronize
             Print.info('Waiting for the nodes to synchronize...')
             sleep(2 * self.node_parameters.timeout_delay / 1000)

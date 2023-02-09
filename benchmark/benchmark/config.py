@@ -19,32 +19,78 @@ class Key:
 
 
 class Committee:
-    def __init__(self, names, consensus_addr, transactions_addr, mempool_addr):
-        inputs = [names, consensus_addr, transactions_addr, mempool_addr]
+    def __init__(self, names, addresses, transactions_addr, mempool_addr):
+        inputs = [names, addresses, transactions_addr, mempool_addr]
         assert all(isinstance(x, list) for x in inputs)
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert len({len(x) for x in inputs}) == 1
 
+        port = 3000
+        host = '127.0.0.1'
+        self.number_of_nodes = len(addresses)
+        number_of_byzantine_nodes = (self.number_of_nodes - 1) / 3
+        number_of_honest_nodes = self.number_of_nodes - number_of_byzantine_nodes
+
+        self.number_of_honest_nodes = int(number_of_honest_nodes)
         self.names = names
-        self.consensus = consensus_addr
-        #self.front = transactions_addr
-        self.front = consensus_addr
+        self.consensus = addresses
+        self.front = addresses
         self.mempool = mempool_addr
 
+        #for i, address in enumerate(addresses):
         self.json = {
             'consensus': self._build_consensus(),
             'mempool': self._build_mempool()
         }
+            #primary_addr = {
+                #'transactions': f'{host}:{port + i}'
+            #}
+            #if i < number_of_honest_nodes:
+                #self.json['authorities'][address] = {
+                    #'stake': 1,
+                    #'primary': primary_addr,
+                    #'byzantine': False
+                #}
+            #else:
+                #self.json['authorities'][address] = {
+                    #'stake': 1,
+                    #'primary': primary_addr,
+                    #'byzantine': True
+                #}'''
+
+        #self.json = {
+            #'consensus': self._build_consensus(),
+            #'mempool': self._build_mempool()
+        #}
+
+    #def primary_addresses(self, faults=0):
+        ''' Returns an ordered list of primaries' addresses. '''
+        '''assert faults < self.size()
+        addresses = []
+        good_nodes = self.size() - faults
+        for authority in list(self.json['authorities'].values())[:good_nodes]:
+            addresses += [authority['primary']['transactions']]
+        return addresses'''
 
     def _build_consensus(self):
         node = {}
-        for a, n, f in zip(self.consensus, self.names, self.front):
-            node[n] = {
-                'name': n,
-                'stake': 1,
-                'address': a,
-                'transactions_address': f,
-            }
+        for a, n, f, b in zip(self.consensus, self.names, self.front, range(0, self.number_of_nodes)):
+            if b < self.number_of_honest_nodes:
+                node[n] = {
+                    'name': n,
+                    'stake': 1,
+                    'address': a,
+                    'transactions_address': f,
+                    'byzantine': False,
+                }
+            else:
+                node[n] = {
+                    'name': n,
+                    'stake': 1,
+                    'address': a,
+                    'transactions_address': f,
+                    'byzantine': True,
+                }
         return {'authorities': node, 'epoch': 1}
 
     def _build_mempool(self):
