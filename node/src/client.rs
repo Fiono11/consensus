@@ -1,3 +1,5 @@
+extern crate core;
+
 use anyhow::{Context, Result};
 use bytes::{BufMut, Bytes};
 use bytes::BytesMut;
@@ -6,12 +8,13 @@ use env_logger::Env;
 use futures::future::join_all;
 use futures::sink::SinkExt as _;
 use log::{info, warn};
-use rand::Rng;
+use rand::{random, Rng};
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use consensus::{ConsensusMessage, Transaction};
+use consensus::{ConsensusMessage, NUMBER_OF_TXS, ParentHash, Transaction, TxHash};
+use crypto::Digest;
 
 #[derive(Parser)]
 #[clap(
@@ -62,8 +65,6 @@ async fn main() -> Result<()> {
     // Wait for all nodes to be online and synchronized.
     client.wait().await;
 
-    info!("3");
-
     // Start the benchmark.
     client.send().await.context("Failed to submit transactions")
 }
@@ -95,8 +96,6 @@ impl Client {
 
         // Submit all transactions.
         let burst = self.rate / PRECISION;
-        let message = bincode::serialize(&ConsensusMessage::Transaction(Transaction::default())).unwrap();
-        let tx = Bytes::from(message);
         //let mut tx = BytesMut::with_capacity(self.size);
         let mut counter = 0;
         //let mut r = rand::thread_rng().gen();
@@ -108,14 +107,21 @@ impl Client {
         info!("Start sending transactions");
 
         //'main: loop {
-        for x in 0..1 {
+        for x in 0..NUMBER_OF_TXS {
             interval.as_mut().tick().await;
             let now = Instant::now();
+            let mut parent_hash: [u8; 32] = [0; 32];
+            for (i, &byte) in x.to_le_bytes().iter().enumerate() {
+                parent_hash[i] = byte;
+            }
+            let transaction = Transaction::new(ParentHash(Digest(parent_hash)), TxHash(Digest::random()));
+            let message = bincode::serialize(&ConsensusMessage::Transaction(transaction.clone())).unwrap();
+            let tx = Bytes::from(message);
 
             //for x in 0..2 {
                 //if x == counter % burst {
                     // NOTE: This log entry is used to compute performance.
-                    info!("Sending sample transaction {}", counter);
+                    info!("Sending transaction {}: {:?}", counter, transaction);
 
                     //tx.put_u8(0u8); // Sample txs start with 0.
                     //tx.put_u64(counter); // This counter identifies the tx.
