@@ -53,13 +53,14 @@ class LogParser:
         #}
         #self.timeouts = max(timeouts)
 
-        proposals, decisions = zip(*results)
+        proposals, decisions, latency = zip(*results)
         self.proposals = self._merge_results([x.items() for x in proposals])
         self.decisions = self._merge_results([x.items() for x in decisions])
+        self.latency = self._merge_results([x.items() for x in latency])
 
         print(decisions)
 
-        p = 4
+        p = len(nodes)
 
         l = numpy.array_split(decisions, p)
 
@@ -81,8 +82,8 @@ class LogParser:
         for i in range(1, p):
             if sorted(l[i][0]):
                 print(sorted(l[i][0]))
-                #assert sorted(l[0][0]) == sorted(l[i][0])
-                #assert set(l[0][0]) == set(l[i][0])
+                assert sorted(l[0][0]) == sorted(l[i][0])
+                assert set(l[0][0]) == set(l[i][0])
             else:
                 empty.append(l[i][0])
         #assert len(empty) == 1
@@ -162,14 +163,19 @@ class LogParser:
         tmp = [(d, self._to_posix(t)) for t, d in tmp]
         elections = self._merge_results([tmp])
 
-        tmp = findall(r'\[(.*Z) .* Decided ParentHash\([^ ]+\) -> ([^ ]+=)', log)
+        tmp = findall(r'\[(.*Z) .* Decided1 ParentHash\([^ ]+\) -> ([^ ]+=)', log)
         tmp = [(d, self._to_posix(t)) for t, d in tmp]
         decisions = self._merge_results([tmp])
 
+        tmp = findall(r'\[(.*Z) .* Decided2 TxHash\([^ ]+\) -> ([^ ]+=)', log)
+        tmp = [(d, self._to_posix(t)) for t, d in tmp]
+        latency = self._merge_results([tmp])
+
         print ("elections: ", elections)
         print ("decisions: ", decisions)
+        print ("latency: ", latency)
 
-        return elections, decisions
+        return elections, decisions, latency
 
         #return proposals, commits, sizes, samples, timeouts, configs
 
@@ -178,19 +184,20 @@ class LogParser:
         return datetime.timestamp(x)
 
     def _consensus_throughput(self):
-        """if not self.commits:
+        if not self.decisions:
             return 0, 0, 0
-        start, end = min(self.proposals.values()), max(self.commits.values())
+        start, end = min(self.proposals.values()), max(self.decisions.values())
         duration = end - start
-        bytes = sum(self.sizes.values())
+        #bytes = sum(self.sizes.values())
+        bytes = 400
         bps = bytes / duration
-        tps = bps / self.size[0]
-        return tps, bps, duration"""
+        tps = bps / 400
+        return tps, bps, duration
         return 0, 0, 0
 
     def _consensus_latency(self):
-        #latency = [c - self.proposals[d] for d, c in self.commits.items()]
-        #return mean(latency) if latency else 0
+        latency = [c - self.proposals[d] for d, c in self.latency.items()]
+        return mean(latency) if latency else 0
         return 0
 
     def _end_to_end_throughput(self):

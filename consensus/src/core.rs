@@ -403,7 +403,8 @@ impl Core {
                 self.elections.get_mut(&tx.parent_hash).unwrap().decided_vote = Some(vote.clone());
                 //if !self.decided_txs.contains_key(&vote.signer) {
                     //self.insert_decided(self.id, digest.clone(), tx.parent_hash);
-                    info!("Decided {:?} -> {:?}", &tx.parent_hash, &digest);
+                    info!("Decided1 {:?} -> {:?}", &tx.parent_hash, &digest);
+                    info!("Decided2 {:?} -> {:?}", &digest, &tx.parent_hash);
                 //}
                 return vote
             }
@@ -413,7 +414,8 @@ impl Core {
                 self.elections.get_mut(&tx.parent_hash).unwrap().decided_vote = Some(vote.clone());
                 //if !self.decided_txs.contains_key(&vote.signer) {
                 //self.insert_decided(self.id, digest.clone(), tx.parent_hash);
-                    info!("Decided {:?} -> {:?}", &tx.parent_hash, &digest);
+                    info!("Decided1 {:?} -> {:?}", &tx.parent_hash, &digest);
+                    info!("Decided2 {:?} -> {:?}", &digest, &tx.parent_hash);
                 //}
                 return vote
             } else if tally.final_count > 0 {
