@@ -253,7 +253,7 @@ impl Core {
         }
     }
 
-    /*fn validate_vote(&mut self, vote: &Vote, tx: &Transaction) -> VoteState {
+    async fn validate_vote(&mut self, vote: &Vote, tx: &Transaction) -> VoteState {
         let concurrent_txs = self.elections.get(&tx.parent_hash).unwrap().concurrent_txs.clone();
         let mut _state = Invalid;
         let tx = vote.value.clone();
@@ -267,7 +267,7 @@ impl Core {
                         let tallies = tally_votes(&concurrent_txs, &proof_round_votes);
                         let tally = tallies.get(&tx.tx_hash).unwrap();
                         if tally.final_count >= QUORUM {
-                            self.insert_decided(vote.signer, tx.tx_hash);
+                            self.insert_decided(vote.signer, tx.tx_hash, tx.parent_hash.clone());
                             /*if !self.decided_txs.contains_key(&vote.signer) {
                                 self.decided_txs.insert(vote.signer, tx.tx_hash);
                                 info!("Inserted {:?}", &vote);
@@ -327,7 +327,7 @@ impl Core {
         _state
     }
 
-    async fn try_validate_pending_votes(&mut self, round: &Round, tx: &Transaction) {
+    /*async fn try_validate_pending_votes(&mut self, round: &Round, tx: &Transaction) {
         //let binding = self.elections.lock().unwrap();
         //let election = binding.get(&tx.parent_hash).unwrap();
         let pending_votes = self.elections.get(&tx.parent_hash).unwrap().pending_votes.clone();
@@ -562,9 +562,9 @@ impl Core {
 
     async fn handle_vote(&mut self, vote: Vote) {
         debug!("Received {:?}", &vote);
-        let vote_state = self.validate_vote(vote.clone()).await;
         self.start_election(vote.clone()).await;
         self.start_round(vote.clone()).await;
+        let vote_state = self.validate_vote(&vote, &vote.value).await;
         if vote_state == Valid {
             self.elections.get_mut(&vote.value.parent_hash).unwrap().concurrent_txs.insert(vote.value.tx_hash.clone());
             self.insert_vote(vote.clone()).await;
@@ -598,9 +598,9 @@ impl Core {
         }
     }
 
-    async fn validate_vote(&mut self, vote: Vote) -> VoteState {
-        Valid
-    }
+    //async fn validate_vote(&mut self, vote: Vote) -> VoteState {
+        //Valid
+    //}
 
     async fn send_vote(&mut self, vote: Vote) {
         let msg = Message::new(self.id, vote.clone());
