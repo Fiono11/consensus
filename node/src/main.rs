@@ -46,11 +46,11 @@ enum Command {
         #[clap(short, long, value_parser, value_name = "PATH")]
         store: String,
     },
-    /// Deploy a local testbed with the specified number of nodes.
-    Deploy {
-        #[clap(short, long, value_parser = clap::value_parser!(u16).range(4..))]
-        nodes: u16,
-    },
+    // Deploy a local testbed with the specified number of nodes.
+    //Deploy {
+        //#[clap(short, long, value_parser = clap::value_parser!(u16).range(4..))]
+        //nodes: u16,
+    //},
 }
 
 #[tokio::main]
@@ -90,16 +90,16 @@ async fn main() {
             }
             Err(e) => error!("{}", e),
         },
-        Command::Deploy { nodes } => match deploy_testbed(nodes) {
+        /*Command::Deploy { nodes } => match deploy_testbed(nodes) {
             Ok(handles) => {
                 let _ = join_all(handles).await;
             }
             Err(e) => error!("Failed to deploy testbed: {}", e),
-        },
+        },*/
     }
 }
 
-fn deploy_testbed(nodes: u16) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {
+/*fn deploy_testbed(nodes: u16) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {
     let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
 
     // Print the committee file.
@@ -147,4 +147,4 @@ fn deploy_testbed(nodes: u16) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error:
             }))
         })
         .collect::<Result<_, Box<dyn std::error::Error>>>()
-}
+}*/

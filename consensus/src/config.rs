@@ -37,6 +37,7 @@ pub struct Authority {
     pub address: SocketAddr,
     /// Address to receive client transactions.
     pub transactions_address: SocketAddr,
+    pub byzantine: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -46,15 +47,16 @@ pub struct Committee {
 }
 
 impl Committee {
-    pub fn new(info: Vec<(PublicKey, Stake, SocketAddr, SocketAddr)>, epoch: EpochNumber) -> Self {
+    pub fn new(info: Vec<(PublicKey, Stake, SocketAddr, SocketAddr, bool)>, epoch: EpochNumber) -> Self {
         Self {
             authorities: info
                 .into_iter()
-                .map(|(name, stake, transactions_address, address)| {
+                .map(|(name, stake, transactions_address, address, byzantine)| {
                     let authority = Authority {
                         stake,
                         transactions_address,
                         address,
+                        byzantine,
                     };
                     (name, authority)
                 })

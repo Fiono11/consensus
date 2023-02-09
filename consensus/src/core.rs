@@ -607,7 +607,7 @@ impl Core {
 
     async fn send_vote(&mut self, vote: Vote) {
         let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
-        sleep(Duration::from_millis(rand));
+        //sleep(Duration::from_millis(rand));
         let msg = Message::new(self.id, vote.clone());
         debug!("Sent {:?}", &vote);
         let message = bincode::serialize(&ConsensusMessage::Message(msg))

@@ -115,7 +115,7 @@ impl Consensus {
             signature_service.clone(),
             store.clone(),
             rx_vote,
-            false,
+            committee.authorities.get(&name).unwrap().byzantine,
             rx_transaction,
             tx_commit,
             (public_keys, addresses),
