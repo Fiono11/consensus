@@ -536,7 +536,9 @@ impl Core {
             Some(election) => (),
             None => {
                 let election = Election::new();
-                info!("Created {:?}", &vote.value.parent_hash);
+                if !self.elections.contains_key(&vote.value.parent_hash) {
+                    info!("Created {:?}", &vote.value.parent_hash);
+                }
                 self.elections.insert(vote.value.parent_hash, election);
             }
         }
@@ -627,9 +629,9 @@ impl Core {
                 Some(transaction) = self.rx_transaction.recv() => {
                     //info!("Received {:?}", transaction.tx_hash);
                     let vote = Vote::new(self.id, 0, transaction.clone(), Initial, None);
-                    if !self.elections.contains_key(&transaction.parent_hash) {
-                        info!("Created {:?}", &transaction.parent_hash);
-                    }
+                    //if !self.elections.contains_key(&transaction.parent_hash) {
+                        //info!("Created {:?}", &transaction.parent_hash);
+                    //}
                     //self.handle_vote(vote.clone()).await;
                     self.send_vote(vote).await;
                 },

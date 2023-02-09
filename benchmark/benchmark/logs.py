@@ -14,7 +14,7 @@ class ParseError(Exception):
 
 
 class LogParser:
-    txs = 1
+    txs = 2
 
     def __init__(self, clients, nodes, faults):
         inputs = [clients, nodes]
@@ -81,9 +81,9 @@ class LogParser:
 
         for i in range(1, p):
             if sorted(l[i][0]):
-                print(sorted(l[i][0]))
+                print("sorted", sorted(l[i][0]))
                 assert sorted(l[0][0]) == sorted(l[i][0])
-                assert set(l[0][0]) == set(l[i][0])
+                #assert set(l[0][0]) == set(l[i][0])
             else:
                 empty.append(l[i][0])
         #assert len(empty) == 1
@@ -189,9 +189,9 @@ class LogParser:
         start, end = min(self.proposals.values()), max(self.decisions.values())
         duration = end - start
         #bytes = sum(self.sizes.values())
-        bytes = 400
+        bytes = 400 * self.txs
         bps = bytes / duration
-        tps = bps / 400
+        tps = self.txs / duration
         return tps, bps, duration
         return 0, 0, 0
 
