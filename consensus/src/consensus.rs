@@ -37,7 +37,7 @@ pub type Round = u64;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ConsensusMessage {
-    Transaction(Transaction),
+    Transaction(Vec<Transaction>),
     //Propose(Block),
     //Vote(Vote),
     Message(Message),
@@ -146,12 +146,14 @@ impl MessageHandler for ConsensusReceiverHandler {
         }*/
 
         match bincode::deserialize(&serialized).map_err(DagError::SerializationError)? {
-            ConsensusMessage::Transaction(tx) => {
+            ConsensusMessage::Transaction(txs) => {
                 //info!("Received tx!");
-                self.tx_transaction
-                    .send(tx)
-                    .await
-                    .expect("Failed to send transaction")
+                for tx in txs {
+                    self.tx_transaction
+                        .send(tx)
+                        .await
+                        .expect("Failed to send transaction")
+                }
             },
             ConsensusMessage::Message(msg) => {
                 //info!("Received vote!");

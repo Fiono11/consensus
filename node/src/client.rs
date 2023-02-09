@@ -106,6 +106,8 @@ impl Client {
         // NOTE: This log entry is used to compute performance.
         info!("Start sending transactions");
 
+        let mut txs = Vec::new();
+
         //'main: loop {
         for x in 0..NUMBER_OF_TXS {
             interval.as_mut().tick().await;
@@ -115,8 +117,9 @@ impl Client {
                 parent_hash[i] = byte;
             }
             let transaction = Transaction::new(ParentHash(Digest(parent_hash)), TxHash(Digest::random()));
-            let message = bincode::serialize(&ConsensusMessage::Transaction(transaction.clone())).unwrap();
-            let tx = Bytes::from(message);
+            txs.push(transaction.clone());
+            //let message = bincode::serialize(&ConsensusMessage::Transaction(transaction.clone())).unwrap();
+            //let tx = Bytes::from(message);
 
             //for x in 0..2 {
                 //if x == counter % burst {
@@ -134,16 +137,24 @@ impl Client {
                 //tx.resize(self.size, 0u8);
                 //let bytes = tx.split().freeze();
 
-                if let Err(e) = transport.send(tx.clone()).await {
-                    warn!("Failed to send transaction: {}", e);
+                //if let Err(e) = transport.send(tx.clone()).await {
+                    //warn!("Failed to send transaction: {}", e);
                     //break 'main;
-                }
+                //}
             //}
             if now.elapsed().as_millis() > BURST_DURATION as u128 {
                 // NOTE: This log entry is used to compute performance.
                 warn!("Transaction rate too high for this client");
             }
             counter += 1;
+        }
+
+        let message = bincode::serialize(&ConsensusMessage::Transaction(txs.clone())).unwrap();
+        let tx = Bytes::from(message);
+
+        if let Err(e) = transport.send(tx.clone()).await {
+            warn!("Failed to send transaction: {}", e);
+            //break 'main;
         }
         Ok(())
     }
