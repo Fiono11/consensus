@@ -53,9 +53,9 @@ class LogParser:
         #}
         #self.timeouts = max(timeouts)
 
-        proposals, commits, decisions = zip(*results)
+        proposals, decisions = zip(*results)
         self.proposals = self._merge_results([x.items() for x in proposals])
-        self.commits = self._merge_results([x.items() for x in commits])
+        self.decisions = self._merge_results([x.items() for x in decisions])
 
         print(decisions)
 
@@ -158,20 +158,18 @@ class LogParser:
             #},
         #}
 
-        tmp = findall(r'\[(.*Z) .* Received ([^ ]+=)', log)
+        tmp = findall(r'\[(.*Z) .* Created ([^ ]+=)', log)
         tmp = [(d, self._to_posix(t)) for t, d in tmp]
-        proposals = self._merge_results([tmp])
+        elections = self._merge_results([tmp])
 
-        tmp = findall(r'\[(.*Z) .* Decided ([^ ]+=)', log)
-        decisions = [(d, a) for t, a, d in tmp]
-        tmp = [(d, self._to_posix(t)) for t, a, d in tmp]
-        commits = self._merge_results([tmp])
+        tmp = findall(r'\[(.*Z) .* Decided ParentHash\([^ ]+\) -> ([^ ]+=)', log)
+        tmp = [(d, self._to_posix(t)) for t, d in tmp]
+        decisions = self._merge_results([tmp])
 
-        print ("proposals: ", proposals)
+        print ("elections: ", elections)
         print ("decisions: ", decisions)
-        print ("commits: ", commits)
 
-        return proposals, commits, decisions
+        return elections, decisions
 
         #return proposals, commits, sizes, samples, timeouts, configs
 

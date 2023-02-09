@@ -403,7 +403,7 @@ impl Core {
                 self.elections.get_mut(&tx.parent_hash).unwrap().decided_vote = Some(vote.clone());
                 //if !self.decided_txs.contains_key(&vote.signer) {
                     //self.insert_decided(self.id, digest.clone(), tx.parent_hash);
-                    info!("Decided {:?}", &digest);
+                    info!("Decided {:?} -> {:?}", &tx.parent_hash, &digest);
                 //}
                 return vote
             }
@@ -413,7 +413,7 @@ impl Core {
                 self.elections.get_mut(&tx.parent_hash).unwrap().decided_vote = Some(vote.clone());
                 //if !self.decided_txs.contains_key(&vote.signer) {
                 //self.insert_decided(self.id, digest.clone(), tx.parent_hash);
-                    info!("Decided {:?}", &digest);
+                    info!("Decided {:?} -> {:?}", &tx.parent_hash, &digest);
                 //}
                 return vote
             } else if tally.final_count > 0 {
@@ -534,7 +534,7 @@ impl Core {
             Some(election) => (),
             None => {
                 let election = Election::new();
-                debug!("Started election {:?}", &vote.value.parent_hash);
+                info!("Created {:?}", &vote.value.parent_hash);
                 self.elections.insert(vote.value.parent_hash, election);
             }
         }
@@ -625,6 +625,9 @@ impl Core {
                 Some(transaction) = self.rx_transaction.recv() => {
                     //info!("Received {:?}", transaction.tx_hash);
                     let vote = Vote::new(self.id, 0, transaction.clone(), Initial, None);
+                    if !self.elections.contains_key(&transaction.parent_hash) {
+                        info!("Created {:?}", &transaction.parent_hash);
+                    }
                     //self.handle_vote(vote.clone()).await;
                     self.send_vote(vote).await;
                 },
