@@ -69,6 +69,7 @@ impl Core {
         tx_commit: Sender<Block>,
         peers: (Vec<PublicKey>, Vec<SocketAddr>),
     ) {
+        debug!("Node {:?} is byzantine: {}", id, byzantine);
         tokio::spawn(async move {
             Self {
                 id,
@@ -388,7 +389,7 @@ impl Core {
     async fn decide_vote(&mut self, votes: &BTreeSet<Vote>, round: Round, tx: &Transaction) -> Vote {
         if self.elections.get_mut(&tx.parent_hash).unwrap().decided_vote.is_some() {
             let mut vote = self.elections.get_mut(&tx.parent_hash).unwrap().decided_vote.as_ref().unwrap().clone();
-            vote.round = round + 1;
+            vote.round = round;
             return vote;
             //self.send_vote(vote).await;
         }
@@ -584,7 +585,7 @@ impl Core {
         }
         let votes = self.elections.get(&vote.value.parent_hash).unwrap().state.get(&vote.round).unwrap().votes.clone();
         let election_active = self.elections.get(&vote.value.parent_hash).unwrap().active;
-        if votes.len() > QUORUM && !voted_next_round && election_active {
+        if votes.len() >= QUORUM && !voted_next_round && election_active {
             {
                 let &(ref mutex, ref cvar) = &*self.elections.get(&vote.value.parent_hash).unwrap().state.get(&vote.round).unwrap().timer;
                 let value = mutex.lock().unwrap();
@@ -606,6 +607,10 @@ impl Core {
     //}
 
     async fn send_vote(&mut self, vote: Vote) {
+        let mut vote = vote;
+        if self.byzantine {
+            vote = Vote::random(self.id, vote.value.parent_hash, vote.round);
+        }
         let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
         //sleep(Duration::from_millis(rand));
         let msg = Message::new(self.id, vote.clone());
@@ -627,7 +632,13 @@ impl Core {
                     //ConsensusMessage::Message(msg) => {
                         //info!("Received!");
                         //self.send_vote(vote).await;
+                    if self.byzantine && !self.elections.get(&vote.value.parent_hash).unwrap().state.get(&vote.round).unwrap().voted {
+                        self.send_vote(vote.clone()).await;
+                        self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&vote.round).unwrap().voted = true;
+                    }
+                    else {
                         self.handle_vote(vote.clone()).await;
+                    }
                     //}
                     //_ => panic!("Unexpected protocol message")
                 },

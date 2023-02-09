@@ -68,10 +68,10 @@ impl Vote {
             signer: id, round, value, category, proof_round,
         }
     }
-    pub(crate) fn random(id: PublicKey, parent_hash: ParentHash) -> Vote {
+    pub(crate) fn random(id: PublicKey, parent_hash: ParentHash, round: Round) -> Vote {
         let tx_hash = TxHash(Digest::random());
         let tx = Transaction::new(parent_hash, tx_hash);
-        Vote::new(id, 0, tx, Initial, None)
+        Vote::new(id, round, tx, Initial, None)
     }
 }
 
