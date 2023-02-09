@@ -327,19 +327,19 @@ impl Core {
         _state
     }
 
-    /*async fn try_validate_pending_votes(&mut self, round: &Round, tx: &Transaction) {
+    async fn try_validate_pending_votes(&mut self, round: &Round, tx: &Transaction) {
         //let binding = self.elections.lock().unwrap();
         //let election = binding.get(&tx.parent_hash).unwrap();
         let pending_votes = self.elections.get(&tx.parent_hash).unwrap().pending_votes.clone();
         for vote in &pending_votes {
             if &vote.proof_round.unwrap() == round {
-                let state = self.validate_vote(vote, tx);
+                let state = self.validate_vote(vote, tx).await;
                 if state == Valid {
-                    self.insert_vote(vote.clone(), tx).await;
+                    self.insert_vote(vote.clone()).await;
                 }
             }
         }
-    }*/
+    }
 
     /*async fn decide_vote(&mut self, votes: &BTreeSet<Vote>, round: Round, tx: &Transaction) -> Vote {
         let concurrent_txs = self.elections.get(&tx.parent_hash).unwrap().concurrent_txs.clone();
@@ -569,8 +569,7 @@ impl Core {
             self.elections.get_mut(&vote.value.parent_hash).unwrap().concurrent_txs.insert(vote.value.tx_hash.clone());
             self.insert_vote(vote.clone()).await;
             //self.send_vote(vote.clone()).await;
-            // validate pending
-            // send valid
+            self.validate_vote(&vote, &vote.value).await;
         }
         let next_round = vote.round + 1;
         let mut voted_next_round = false;
