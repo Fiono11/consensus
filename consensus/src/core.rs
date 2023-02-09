@@ -386,6 +386,12 @@ impl Core {
     }*/
 
     async fn decide_vote(&mut self, votes: &BTreeSet<Vote>, round: Round, tx: &Transaction) -> Vote {
+        if self.elections.get_mut(&tx.parent_hash).unwrap().decided_vote.is_some() {
+            let mut vote = self.elections.get_mut(&tx.parent_hash).unwrap().decided_vote.as_ref().unwrap().clone();
+            vote.round = round + 1;
+            return vote;
+            //self.send_vote(vote).await;
+        }
         let concurrent_txs = self.elections.get(&tx.parent_hash).unwrap().concurrent_txs.clone();
         //let election = self.elections.lock().unwrap().get_mut(&tx.parent_hash).unwrap();
         assert!(votes.len() >= QUORUM);
@@ -579,18 +585,16 @@ impl Core {
         let votes = self.elections.get(&vote.value.parent_hash).unwrap().state.get(&vote.round).unwrap().votes.clone();
         let election_active = self.elections.get(&vote.value.parent_hash).unwrap().active;
         if votes.len() > QUORUM && !voted_next_round && election_active {
+            {
+                let &(ref mutex, ref cvar) = &*self.elections.get(&vote.value.parent_hash).unwrap().state.get(&vote.round).unwrap().timer;
+                let value = mutex.lock().unwrap();
+                let mut value = value;
+                while *value == Timer::Active {
+                    debug!("Node {}: waiting for the round {} to expire...", self.id, &vote.round);
+                    value = cvar.wait(value).unwrap();
+                }
+            }
             let vote = self.decide_vote(&votes, next_round, &vote.value).await;
-            /*match self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&next_round) {
-                Some(rs) => {
-                    rs.voted = true;
-                }
-                None => {
-                    let mut round_state = RoundState::new(next_round);
-                    round_state.voted = true;
-                    debug!("Started round {:?} of election {:?}", &next_round, &vote.value.parent_hash);
-                    self.elections.get_mut(&vote.value.parent_hash).unwrap().state.insert(next_round,round_state);
-                }
-            }*/
             self.start_round(vote.clone()).await;
             self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&next_round).unwrap().voted = true;
             self.send_vote(vote.clone()).await;
@@ -602,6 +606,8 @@ impl Core {
     //}
 
     async fn send_vote(&mut self, vote: Vote) {
+        let rand = rand::thread_rng().gen_range(0..VOTE_DELAY as u64);
+        sleep(Duration::from_millis(rand));
         let msg = Message::new(self.id, vote.clone());
         debug!("Sent {:?}", &vote);
         let message = bincode::serialize(&ConsensusMessage::Message(msg))
