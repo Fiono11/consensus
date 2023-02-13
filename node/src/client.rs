@@ -49,11 +49,10 @@ async fn main() -> Result<()> {
         .format_timestamp_millis()
         .init();
 
-    info!("nodes1: {:?}", &cli.nodes);
-
     info!("Node address: {}", cli.target);
     info!("Transactions size: {} B", cli.size);
     info!("Transactions rate: {} tx/s", cli.rate);
+
     let client = Client {
         target: cli.target,
         size: cli.size,
@@ -118,30 +117,7 @@ impl Client {
             }
             let transaction = Transaction::new(ParentHash(Digest(parent_hash)), TxHash(Digest::random()));
             txs.push(transaction.clone());
-            //let message = bincode::serialize(&ConsensusMessage::Transaction(transaction.clone())).unwrap();
-            //let tx = Bytes::from(message);
-
-            //for x in 0..2 {
-                //if x == counter % burst {
-                    // NOTE: This log entry is used to compute performance.
-                    info!("Sending transaction {}: {:?}", counter, transaction);
-
-                    //tx.put_u8(0u8); // Sample txs start with 0.
-                    //tx.put_u64(counter); // This counter identifies the tx.
-                //} else {
-                    //r += 1;
-
-                    //tx.put_u8(1u8); // Standard txs start with 1.
-                    //tx.put_u64(r); // Ensures all clients send different txs.
-                //};
-                //tx.resize(self.size, 0u8);
-                //let bytes = tx.split().freeze();
-
-                //if let Err(e) = transport.send(tx.clone()).await {
-                    //warn!("Failed to send transaction: {}", e);
-                    //break 'main;
-                //}
-            //}
+            info!("Sending transaction {}: {:?}", counter, transaction);
             if now.elapsed().as_millis() > BURST_DURATION as u128 {
                 // NOTE: This log entry is used to compute performance.
                 warn!("Transaction rate too high for this client");

@@ -14,7 +14,7 @@ class ParseError(Exception):
 
 
 class LogParser:
-    txs = 1
+    txs = 10
 
     def __init__(self, clients, nodes, faults):
         inputs = [clients, nodes]
@@ -44,49 +44,21 @@ class LogParser:
                 results = p.map(self._parse_nodes, nodes)
         except (ValueError, IndexError) as e:
             raise ParseError(f'Failed to parse node logs: {e}')
-        #proposals, commits, sizes, self.received_samples, timeouts, self.configs \
-            #= zip(*results)
-        #self.proposals = self._merge_results([x.items() for x in proposals])
-        #self.commits = self._merge_results([x.items() for x in commits])
-        #self.sizes = {
-            #k: v for x in sizes for k, v in x.items() if k in self.commits
-        #}
-        #self.timeouts = max(timeouts)
 
         proposals, decisions, latency = zip(*results)
         self.proposals = self._merge_results([x.items() for x in proposals])
         self.decisions = self._merge_results([x.items() for x in decisions])
         self.latency = self._merge_results([x.items() for x in latency])
 
-        print(decisions)
+        decisions_by_node = numpy.array_split(decisions, len(nodes))
 
-        p = len(nodes)
+        assert len(sorted(decisions_by_node[0][0])) == self.txs # number of txs
 
-        l = numpy.array_split(decisions, p)
+        print("Sorted decisions of node", 0, ":", sorted(decisions_by_node[0][0]))
 
-        print(l)
-
-        #print(p)
-
-        #print("l1: ", l[0][0])
-        #print("l2: ", l[1][0])
-
-        print(sorted(l[0][0]))
-
-        print("SIZE: ", len(sorted(l[0][0])))
-
-        #assert len(sorted(l[0][0])) == self.txs # number of txs
-
-        empty = list();
-
-        for i in range(1, p):
-            if sorted(l[i][0]):
-                print("sorted", sorted(l[i][0]))
-                assert sorted(l[0][0]) == sorted(l[i][0])
-                #assert set(l[0][0]) == set(l[i][0])
-            else:
-                empty.append(l[i][0])
-        #assert len(empty) == 1
+        for i in range(1, len(nodes)):
+            print("Sorted decisions of node", i, ":", sorted(decisions_by_node[0][0]))
+            assert sorted(decisions_by_node[0][0]) == sorted(decisions_by_node[i][0])
 
         # Check whether clients missed their target rate.
         if self.misses != 0:
@@ -94,10 +66,6 @@ class LogParser:
                 f'Clients missed their target rate {self.misses:,} time(s)'
             )
 
-        # Check whether the nodes timed out.
-        # Note that nodes are expected to time out once at the beginning.
-        #if self.timeouts > 2:
-            #Print.warn(f'Nodes timed out {self.timeouts:,} time(s)')
 
     def _merge_results(self, input):
         # Keep the earliest timestamp.
@@ -129,36 +97,6 @@ class LogParser:
         if search(r'panic', log) is not None:
             raise ParseError('Node(s) panicked')
 
-        #tmp = findall(r'\[(.*Z) .* Created B\d+ -> ([^ ]+=)', log)
-        #tmp = [(d, self._to_posix(t)) for t, d in tmp]
-        #proposals = self._merge_results([tmp])
-
-        #tmp = findall(r'\[(.*Z) .* Committed B\d+ -> ([^ ]+=)', log)
-        #tmp = [(d, self._to_posix(t)) for t, d in tmp]
-        #commits = self._merge_results([tmp])
-
-        #tmp = findall(r'Batch ([^ ]+) contains (\d+) B', log)
-        #sizes = {d: int(s) for d, s in tmp}
-
-        #tmp = findall(r'Batch ([^ ]+) contains sample tx (\d+)', log)
-        #samples = {int(s): d for d, s in tmp}
-
-        #tmp = findall(r'.* WARN .* Timeout', log)
-        #timeouts = len(tmp)
-
-        #configs = {
-            #'consensus': {
-                #'timeout_delay': int(
-                    #search(r'Timeout delay .* (\d+)', log).group(1)
-                #),
-                #'sync_retry_delay': int(
-                    #search(
-                        #r'consensus.* Sync retry delay .* (\d+)', log
-                    #).group(1)
-                #),
-            #},
-        #}
-
         tmp = findall(r'\[(.*Z) .* Created ([^ ]+=)', log)
         tmp = [(d, self._to_posix(t)) for t, d in tmp]
         elections = self._merge_results([tmp])
@@ -171,9 +109,9 @@ class LogParser:
         tmp = [(d, self._to_posix(t)) for t, d in tmp]
         latency = self._merge_results([tmp])
 
-        print ("elections: ", elections)
-        print ("decisions: ", decisions)
-        print ("latency: ", latency)
+        #print("elections: ", elections)
+        #print("decisions: ", decisions)
+        #print("latency: ", latency)
 
         return elections, decisions, latency
 
