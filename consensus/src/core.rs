@@ -1,29 +1,20 @@
 use std::collections::{BTreeSet, HashMap};
 use std::net::SocketAddr;
-use std::sync::{Arc, Condvar, Mutex};
 use tokio::sync::mpsc::Sender;
-use std::thread;
-use std::thread::sleep;
-use std::time::Duration;
 use bytes::Bytes;
-use futures::task::SpawnExt;
-use log::{debug, info, warn};
-use rand::{Rng, thread_rng};
-use tokio::sync::mpsc::{channel, Receiver};
-use crate::constants::{NUMBER_OF_BYZANTINE_NODES, NUMBER_OF_CORRECT_NODES, NUMBER_OF_TXS, QUORUM, ROUND_TIMER, VOTE_DELAY};
+use log::{debug, info};
+use rand::Rng;
+use tokio::sync::mpsc::Receiver;
+use crate::constants::{NUMBER_OF_BYZANTINE_NODES, NUMBER_OF_CORRECT_NODES, QUORUM, VOTE_DELAY};
 use crate::election::{Election, ElectionId};
 use crate::message::Message;
-use crate::{Block, NUMBER_OF_NODES};
+use crate::Block;
 use crate::round::{Round, RoundState, Timer};
 use crate::tally::tally_votes;
 use crate::vote::Category::{Decided, Final, Initial};
-use crate::vote::Value::{One, Zero};
-use crate::vote::{ParentHash, Transaction, TxHash, Value, Vote, VoteState};
+use crate::vote::{ParentHash, Transaction, TxHash, Vote, VoteState};
 use crate::vote::VoteState::{Invalid, Pending, Valid};
-use network::{CancelHandler, MessageHandler, Receiver as NetworkReceiver, ReliableSender, Writer};
-use async_recursion::async_recursion;
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+use network::{CancelHandler, ReliableSender};
 use thiserror::Error;
 
 //#[cfg(test)]
@@ -31,11 +22,9 @@ use thiserror::Error;
 //pub mod core_tests;
 
 use crypto::{CryptoError, Digest, PublicKey, SignatureService};
-use network::SimpleSender;
 use store::{Store, StoreError};
-use crate::config::{Committee, Stake};
-use crate::consensus::{CHANNEL_CAPACITY, ConsensusMessage};
-use crate::error::ConsensusError;
+use crate::config::Committee;
+use crate::consensus::ConsensusMessage;
 
 pub struct Core {
     id: PublicKey,
@@ -631,36 +620,16 @@ impl Core {
 
     async fn run(&mut self) {
         loop {
-            //let result =
             tokio::select! {
                 Some(vote) = self.rx_vote.recv() => {
-                    //ConsensusMessage::Message(msg) => {
-                        //info!("Received!");
-                        //self.send_vote(vote).await;
-                    //if self.byzantine && !self.elections.get(&vote.value.parent_hash).unwrap().state.get(&vote.round).unwrap().voted {
-                        //self.send_vote(vote.clone()).await;
-                        //self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&vote.round).unwrap().voted = true;
-                    //}
-                    //else {
-                        self.handle_vote(vote.clone()).await;
-                    //}
-                    //}
-                    //_ => panic!("Unexpected protocol message")
+                    self.handle_vote(vote.clone()).await;
                 },
                 Some(transaction) = self.rx_transaction.recv() => {
-                    //info!("Received {:?}", transaction.tx_hash);
+                    info!("Received {:?}", &transaction);
                     let vote = Vote::new(self.id, 0, transaction.clone(), Initial, None);
-                    //if !self.elections.contains_key(&transaction.parent_hash) {
-                        //info!("Created {:?}", &transaction.parent_hash);
-                    //}
-                    //self.handle_vote(vote.clone()).await;
                     self.send_vote(vote).await;
                 },
             };
-            //match result {
-                //Ok(()) => (),
-                //Err(e) => warn!("{}", e),
-            //}
 
             // Give the change to schedule other tasks.
             tokio::task::yield_now().await;
@@ -680,29 +649,5 @@ pub enum DagError {
 
     #[error("Serialization error: {0}")]
     SerializationError(#[from] Box<bincode::ErrorKind>),
-
-    #[error("Invalid header id")]
-    InvalidHeaderId,
-
-    #[error("Malformed header {0}")]
-    MalformedHeader(Digest),
-
-    #[error("Received message from unknown authority {0}")]
-    UnknownAuthority(PublicKey),
-
-    #[error("Authority {0} appears in quorum more than once")]
-    AuthorityReuse(PublicKey),
-
-    #[error("Received unexpected vote fo header {0}")]
-    UnexpectedVote(Digest),
-
-    #[error("Received certificate without a quorum")]
-    CertificateRequiresQuorum,
-
-    #[error("Parents of header {0} are not a quorum")]
-    HeaderRequiresQuorum(Digest),
-
-    #[error("Message {0} (round {1}) too old")]
-    TooOld(Digest, Round),
 }
 

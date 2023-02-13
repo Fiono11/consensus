@@ -42,17 +42,6 @@ impl Node {
         // Run the signature service.
         let signature_service = SignatureService::new(secret_key);
 
-        // Make a new mempool.
-        /*Mempool::spawn(
-            name,
-            committee.mempool,
-            parameters.mempool,
-            store.clone(),
-            rx_consensus_to_mempool,
-            tx_mempool_to_consensus,
-        );*/
-
-
         // Run the consensus core.
         Consensus::spawn(
             name,

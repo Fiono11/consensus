@@ -1,33 +1,18 @@
-/*use crate::config::{Committee, Parameters};
-use crate::core::Core;
-use crate::error::ConsensusError;
-use crate::helper::Helper;
-use crate::leader::LeaderElector;
-use crate::mempool::MempoolDriver;
-use crate::messages::{Block, Timeout, Vote, TC};
-use crate::proposer::Proposer;
-use crate::synchronizer::Synchronizer;*/
 use async_trait::async_trait;
 use bytes::Bytes;
-use crypto::{Digest, PublicKey, SignatureService};
-use futures::SinkExt as _;
-use log::{debug, info};
+use crypto::{PublicKey, SignatureService};
+use log::info;
 use network::{MessageHandler, Receiver as NetworkReceiver, Writer};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::net::SocketAddr;
 use store::Store;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
-use crate::error::ConsensusError;
-use crate::messages::{Block, TC, Timeout};
+use tokio::sync::mpsc::{channel, Sender};
+use crate::messages::Block;
 use crate::config::{Committee, Parameters};
 use crate::core::{Core, DagError};
 use crate::message::Message;
 use crate::vote::{Transaction, Vote};
-
-//#[cfg(test)]
-//#[path = "tests/consensus_tests.rs"]
-//pub mod consensus_tests;
 
 /// The default channel capacity for each channel of the consensus.
 pub const CHANNEL_CAPACITY: usize = 1_000;
@@ -38,12 +23,7 @@ pub type Round = u64;
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ConsensusMessage {
     Transaction(Vec<Transaction>),
-    //Propose(Block),
-    //Vote(Vote),
     Message(Message),
-    //Timeout(Timeout),
-    //TC(TC),
-    //SyncRequest(Digest, PublicKey),
 }
 
 pub struct Consensus;
@@ -132,22 +112,9 @@ struct ConsensusReceiverHandler {
 
 #[async_trait]
 impl MessageHandler for ConsensusReceiverHandler {
-    async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
-        //debug!("Received consensus message!");
-        // Reply with an ACK.
-        //let _ = writer.send(Bytes::from("Ack")).await;
-        // Deserialize and parse the message.
-        /*match bincode::deserialize(&serialized).map_err(ConsensusError::SerializationError)? {
-            message => self
-                .tx_consensus
-                .send(message)
-                .await
-                .expect("Failed to consensus message"),
-        }*/
-
+    async fn dispatch(&self, _writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
         match bincode::deserialize(&serialized).map_err(DagError::SerializationError)? {
             ConsensusMessage::Transaction(txs) => {
-                //info!("Received tx!");
                 for tx in txs {
                     self.tx_transaction
                         .send(tx)
@@ -156,13 +123,11 @@ impl MessageHandler for ConsensusReceiverHandler {
                 }
             },
             ConsensusMessage::Message(msg) => {
-                //info!("Received vote!");
                 self.tx_vote
                     .send(msg.vote)
                     .await
                     .expect("Failed to send vote")
             },
-            //Err(e) => warn!("Serialization error: {}", e),
         }
 
         // Give the change to schedule other tasks.
@@ -170,28 +135,3 @@ impl MessageHandler for ConsensusReceiverHandler {
         Ok(())
     }
 }
-
-/*/// Defines how the network receiver handles incoming transactions.
-#[derive(Clone)]
-struct TxReceiverHandler {
-    tx_transaction: Sender<Transaction>,
-}
-
-#[async_trait]
-impl MessageHandler for TxReceiverHandler {
-    async fn dispatch(&self, _writer: &mut Writer, tx: Bytes) -> Result<(), Box<dyn Error>> {
-        // Deserialize and parse the transaction.
-        match bincode::deserialize(&tx).map_err(ConsensusError::SerializationError)? {
-            message => self
-                .tx_transaction
-                .send(message)
-                .await
-                .expect("Failed to transaction"),
-        }
-
-        // Give the change to schedule other tasks.
-        tokio::task::yield_now().await;
-        Ok(())
-    }
-}*/
-

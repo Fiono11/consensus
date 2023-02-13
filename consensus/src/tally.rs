@@ -1,7 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
-use crypto::Digest;
 use crate::vote::Category::{Decided, Final, Initial};
-use crate::vote::Value::{One, Zero};
 use crate::vote::{TxHash, Vote};
 
 #[derive(Clone, Debug)]

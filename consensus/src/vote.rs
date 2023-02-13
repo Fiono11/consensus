@@ -1,15 +1,7 @@
-use rand::Rng;
 use crate::round::Round;
-use crate::vote::Category::{Decided, Final, Initial};
-use crate::vote::Value::{One, Zero};
+use crate::vote::Category::Initial;
 use serde::{Deserialize, Serialize};
 use crypto::{Digest, PublicKey};
-
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Value {
-    Zero,
-    One,
-}
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Category {

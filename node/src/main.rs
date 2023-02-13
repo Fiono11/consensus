@@ -1,16 +1,10 @@
 mod config;
 mod node;
 
-use crate::config::Export as _;
-use crate::config::{Committee, Secret};
 use crate::node::Node;
 use clap::{Parser, Subcommand};
-use consensus::Committee as ConsensusCommittee;
 use env_logger::Env;
-use futures::future::join_all;
 use log::error;
-use std::fs;
-use tokio::task::JoinHandle;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]

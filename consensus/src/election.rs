@@ -1,5 +1,4 @@
 use std::collections::{BTreeSet, HashMap};
-use crypto::Digest;
 use crate::round::{Round, RoundState};
 use crate::vote::{ParentHash, TxHash, Vote};
 

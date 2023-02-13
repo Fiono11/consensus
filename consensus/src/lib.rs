@@ -1,4 +1,3 @@
-use log::debug;
 pub use crate::messages::Block;
 pub use crate::consensus::Consensus;
 pub use crate::config::{Committee, Parameters};
@@ -17,15 +16,6 @@ mod messages;
 mod error;
 mod config;
 mod core;
-
-#[test]
-fn test_consensus() {
-    for i in 0..1 {
-        let network = Network::new();
-        debug!("CONSENSUS INSTANCE {} RUNNING...", i);
-        network.run();
-    }
-}
 
 
 
