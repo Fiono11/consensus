@@ -248,7 +248,7 @@ impl Core {
             }
         }
         debug!("Inserted decided tx: {:?}", (id, &tx_hash));
-        if self.decided_txs.get(&parent_hash).unwrap().len() == NUMBER_OF_NODES {
+        if self.decided_txs.get(&parent_hash).unwrap().len() == NUMBER_OF_CORRECT_NODES {
             debug!("Election {:?} is finished!", &parent_hash);
             self.elections.get_mut(&parent_hash).unwrap().active = false;
         }
@@ -268,7 +268,7 @@ impl Core {
                         let tallies = tally_votes(&concurrent_txs, &proof_round_votes);
                         let tally = tallies.get(&tx.tx_hash).unwrap();
                         if tally.final_count >= QUORUM {
-                            self.insert_decided(vote.signer, tx.tx_hash, tx.parent_hash.clone());
+                            //self.insert_decided(vote.signer, tx.tx_hash, tx.parent_hash.clone());
                             /*if !self.decided_txs.contains_key(&vote.signer) {
                                 self.decided_txs.insert(vote.signer, tx.tx_hash);
                                 info!("Inserted {:?}", &vote);
@@ -542,7 +542,7 @@ impl Core {
         match self.elections.get(&vote.value.parent_hash) {
             Some(election) => (),
             None => {
-                let election = Election::new();
+                let election = Election::new(&vote.value.parent_hash);
                 if !self.elections.contains_key(&vote.value.parent_hash) {
                     info!("Created {:?}", &vote.value.parent_hash);
                 }
@@ -553,7 +553,7 @@ impl Core {
 
     async fn start_round(&mut self, vote: Vote) {
         if let None = self.elections.get(&vote.value.parent_hash).unwrap().state.get(&vote.round) {
-            let round_state = RoundState::new(vote.round);
+            let round_state = RoundState::new(vote.round, &vote.value.parent_hash);
             debug!("Started round {:?} of election {:?}", &vote.round, &vote.value.parent_hash);
             self.elections.get_mut(&vote.value.parent_hash).unwrap().state.insert(vote.round,round_state);
         }
@@ -561,7 +561,11 @@ impl Core {
 
     async fn insert_vote(&mut self, vote: Vote) {
         debug!("Inserted {:?}", vote);
-        if vote.category == Decided {
+        let mut contains = false;
+        if let Some(e) = self.decided_txs.get(&vote.value.parent_hash) {
+            contains = e.contains(&(vote.signer.clone(), vote.value.tx_hash.clone()));
+        }
+        if vote.category == Decided && !contains {
             self.insert_decided(vote.signer.clone(), vote.value.tx_hash.clone(), vote.value.parent_hash.clone());
         }
         self.elections.get_mut(&vote.value.parent_hash).unwrap().state.get_mut(&vote.round).unwrap().votes.insert(vote);
@@ -576,7 +580,8 @@ impl Core {
             self.elections.get_mut(&vote.value.parent_hash).unwrap().concurrent_txs.insert(vote.value.tx_hash.clone());
             self.insert_vote(vote.clone()).await;
             //self.send_vote(vote.clone()).await;
-            self.validate_vote(&vote, &vote.value).await;
+            //self.validate_vote(&vote, &vote.value).await;
+            self.try_validate_pending_votes(&vote.round, &vote.value).await;
         }
         let next_round = vote.round + 1;
         let mut voted_next_round = false;
