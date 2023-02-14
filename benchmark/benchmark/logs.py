@@ -14,9 +14,9 @@ class ParseError(Exception):
 
 
 class LogParser:
-    txs = 10
-
-    def __init__(self, clients, nodes, faults):
+    def __init__(self, clients, nodes, faults, txs, tx_size):
+        self.tx_size = tx_size
+        self.txs = txs
         inputs = [clients, nodes]
         assert all(isinstance(x, list) for x in inputs)
         assert all(isinstance(x, str) for y in inputs for x in y)
@@ -127,11 +127,10 @@ class LogParser:
         start, end = min(self.proposals.values()), max(self.decisions.values())
         duration = end - start
         #bytes = sum(self.sizes.values())
-        bytes = 400 * self.txs
+        bytes = self.tx_size * self.txs
         bps = bytes / duration
         tps = self.txs / duration
         return tps, bps, duration
-        return 0, 0, 0
 
     def _consensus_latency(self):
         latency = [c - self.proposals[d] for d, c in self.latency.items()]
@@ -202,7 +201,7 @@ class LogParser:
             f.write(self.result())
 
     @classmethod
-    def process(cls, directory, faults):
+    def process(cls, directory, faults, txs, tx_size):
         assert isinstance(directory, str)
 
         clients = []
@@ -214,4 +213,4 @@ class LogParser:
             with open(filename, 'r') as f:
                 nodes += [f.read()]
 
-        return cls(clients, nodes, faults)
+        return cls(clients, nodes, faults, txs, tx_size)
